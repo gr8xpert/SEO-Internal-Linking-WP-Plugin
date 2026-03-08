@@ -104,8 +104,11 @@ class RS_Interlinker_AI_Engine {
         $model           = isset( $options['ai_model'] ) ? $options['ai_model'] : 'anthropic/claude-sonnet-4.5';
         $enable_external = ! empty( $options['enable_external'] );
 
-        // Build the prompt
-        $prompt = $this->build_prompt( $post_title, $keyword_index, $links_needed, $enable_external );
+        // Get post context for unique content generation
+        $post_context = $this->get_post_context( $post_id );
+
+        // Build the prompt with context
+        $prompt = $this->build_prompt( $post_title, $keyword_index, $links_needed, $enable_external, $post_context );
 
         // Make API call
         $response = $this->call_api( $api_key, $model, $prompt );
@@ -158,12 +161,67 @@ class RS_Interlinker_AI_Engine {
     }
 
     /**
-     * Build the AI prompt
+     * Get context from post content for unique sentence generation
+     *
+     * @param int $post_id Post ID
+     * @return string Context snippet
      */
-    private function build_prompt( $post_title, $keyword_index, $links_needed, $include_external ) {
+    private function get_post_context( $post_id ) {
+        $post = get_post( $post_id );
+        if ( ! $post ) {
+            return '';
+        }
+
+        // Try excerpt first
+        $excerpt = $post->post_excerpt;
+        if ( ! empty( $excerpt ) ) {
+            return wp_strip_all_tags( $excerpt );
+        }
+
+        // Fall back to content snippet (first 300 chars)
+        $content = $post->post_content;
+        if ( ! empty( $content ) ) {
+            // Strip shortcodes and HTML
+            $content = strip_shortcodes( $content );
+            $content = wp_strip_all_tags( $content );
+            $content = preg_replace( '/\s+/', ' ', $content );
+            $content = trim( $content );
+
+            if ( strlen( $content ) > 300 ) {
+                $content = substr( $content, 0, 300 ) . '...';
+            }
+
+            return $content;
+        }
+
+        return '';
+    }
+
+    /**
+     * Build the AI prompt
+     *
+     * @param string $post_title      Post title
+     * @param array  $keyword_index   Keyword index
+     * @param int    $links_needed    Number of links needed
+     * @param bool   $include_external Include external link
+     * @param string $post_context    Context from post content
+     */
+    private function build_prompt( $post_title, $keyword_index, $links_needed, $include_external, $post_context = '' ) {
         $keyword_list = '';
         foreach ( $keyword_index as $keyword => $url ) {
             $keyword_list .= "{$keyword} | {$url}\n";
+        }
+
+        $context_instruction = '';
+        if ( ! empty( $post_context ) ) {
+            $context_instruction = '
+The page content includes: "' . substr( $post_context, 0, 250 ) . '"
+
+IMPORTANT: Write a UNIQUE sentence that relates specifically to this content. Do NOT use generic phrases like "Buyers exploring X often also consider Y". Instead, create a sentence that:
+- References specific aspects mentioned in the content above
+- Uses varied sentence structures (not always "those interested in X may also like Y")
+- Sounds like it was written by a human editor for this specific page
+';
         }
 
         $external_instruction = '';
@@ -173,15 +231,15 @@ class RS_Interlinker_AI_Engine {
         }
 
         $prompt = 'I have a webpage about "' . $post_title . '".
-
-I need you to write ONE natural sentence that I can append to the page content. This sentence must:
+' . $context_instruction . '
+I need you to write ONE natural, UNIQUE sentence that I can append to the page content. This sentence must:
 
 1. Mention exactly ' . $links_needed . ' of the following related pages by using their exact keyword name from the list below. Choose the most geographically or topically relevant ones:
 
 ' . $keyword_list . '
 ' . $external_instruction . '
 
-3. Sound natural and fit within a real estate or property website context.
+3. Sound natural and UNIQUE - avoid formulaic patterns. Each page should have a distinctly different sentence structure and approach.
 
 Return your response in this exact JSON format:
 {
