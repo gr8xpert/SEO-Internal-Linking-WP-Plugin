@@ -134,10 +134,18 @@ class RS_Interlinker_Processor {
         // Generate AI sentence with links
         $ai_result = $this->generate_ai_links( $post_id, $post->post_title, $max_links );
 
+        // Handle specific error cases
+        if ( is_array( $ai_result ) && isset( $ai_result['error'] ) ) {
+            return array(
+                'success' => false,
+                'message' => $ai_result['error'],
+            );
+        }
+
         if ( ! $ai_result || empty( $ai_result['html'] ) ) {
             return array(
                 'success' => false,
-                'message' => __( 'Failed to generate AI links. Check your API key.', 'rs-smart-interlinker' ),
+                'message' => __( 'Failed to generate AI links. The AI returned an empty response.', 'rs-smart-interlinker' ),
             );
         }
 
@@ -165,15 +173,25 @@ class RS_Interlinker_Processor {
         $keyword_index = $this->indexer->get_index_for_ai( $post_id );
 
         if ( empty( $keyword_index ) ) {
-            return null;
+            return array(
+                'error' => __( 'No keywords indexed. Please rebuild the keyword index in Advanced tab first.', 'rs-smart-interlinker' ),
+            );
         }
 
-        return $this->ai_engine->generate_topup_links(
+        $result = $this->ai_engine->generate_topup_links(
             $post_id,
             $post_title,
             $keyword_index,
             $max_links
         );
+
+        if ( $result === false ) {
+            return array(
+                'error' => __( 'API call failed. Check your API key and try again.', 'rs-smart-interlinker' ),
+            );
+        }
+
+        return $result;
     }
 
     /**

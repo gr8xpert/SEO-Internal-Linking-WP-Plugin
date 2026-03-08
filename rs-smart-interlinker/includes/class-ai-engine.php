@@ -44,6 +44,12 @@ class RS_Interlinker_AI_Engine {
             return '';
         }
 
+        // Backwards compatibility: if it looks like a plaintext API key, return as-is
+        // OpenRouter keys start with "sk-or-" or similar prefixes
+        if ( preg_match( '/^sk-[a-zA-Z]/', $encrypted_value ) ) {
+            return $encrypted_value;
+        }
+
         if ( ! function_exists( 'openssl_decrypt' ) ) {
             return $encrypted_value;
         }
@@ -298,7 +304,7 @@ Return ONLY the JSON, no markdown fences, no explanation.';
         );
 
         $response = wp_remote_post( self::API_ENDPOINT, array(
-            'timeout' => 30,
+            'timeout' => 60,
             'headers' => array(
                 'Authorization' => 'Bearer ' . $api_key,
                 'Content-Type'  => 'application/json',
@@ -309,20 +315,24 @@ Return ONLY the JSON, no markdown fences, no explanation.';
         ) );
 
         if ( is_wp_error( $response ) ) {
+            error_log( 'RS Interlinker API Error: ' . $response->get_error_message() );
             return false;
         }
 
         $status_code = wp_remote_retrieve_response_code( $response );
+        $body = json_decode( wp_remote_retrieve_body( $response ), true );
+
         if ( $status_code !== 200 ) {
+            $error_msg = isset( $body['error']['message'] ) ? $body['error']['message'] : "HTTP $status_code";
+            error_log( 'RS Interlinker API Error: ' . $error_msg );
             return false;
         }
-
-        $body = json_decode( wp_remote_retrieve_body( $response ), true );
 
         if ( isset( $body['choices'][0]['message']['content'] ) ) {
             return $body['choices'][0]['message']['content'];
         }
 
+        error_log( 'RS Interlinker: Unexpected API response structure' );
         return false;
     }
 
