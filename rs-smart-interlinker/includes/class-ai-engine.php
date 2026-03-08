@@ -119,15 +119,20 @@ class RS_Interlinker_AI_Engine {
         // Make API call
         $response = $this->call_api( $api_key, $model, $prompt );
 
+        // Check for error response
+        if ( is_array( $response ) && isset( $response['error'] ) ) {
+            return $response; // Return error to show user
+        }
+
         if ( ! $response ) {
-            return false;
+            return array( 'error' => __( 'API returned empty response.', 'rs-smart-interlinker' ) );
         }
 
         // Parse response
         $parsed = $this->parse_response( $response );
 
         if ( ! $parsed ) {
-            return false;
+            return array( 'error' => __( 'Failed to parse AI response. Try again.', 'rs-smart-interlinker' ) );
         }
 
         // Validate external URL if present
@@ -317,8 +322,9 @@ Return ONLY the JSON, no markdown fences, no explanation.';
         ) );
 
         if ( is_wp_error( $response ) ) {
-            error_log( 'RS Interlinker API Error: ' . $response->get_error_message() );
-            return false;
+            $error_msg = $response->get_error_message();
+            error_log( 'RS Interlinker API Error: ' . $error_msg );
+            return array( 'error' => 'Connection error: ' . $error_msg );
         }
 
         $status_code = wp_remote_retrieve_response_code( $response );
@@ -341,7 +347,7 @@ Return ONLY the JSON, no markdown fences, no explanation.';
         if ( $status_code !== 200 ) {
             $error_msg = isset( $response_body['error']['message'] ) ? $response_body['error']['message'] : "HTTP $status_code";
             error_log( 'RS Interlinker API Error: ' . $error_msg );
-            return false;
+            return array( 'error' => 'API Error: ' . $error_msg );
         }
 
         if ( isset( $response_body['choices'][0]['message']['content'] ) ) {
@@ -349,7 +355,7 @@ Return ONLY the JSON, no markdown fences, no explanation.';
         }
 
         error_log( 'RS Interlinker: Unexpected API response structure' );
-        return false;
+        return array( 'error' => __( 'Unexpected API response structure.', 'rs-smart-interlinker' ) );
     }
 
     /**
