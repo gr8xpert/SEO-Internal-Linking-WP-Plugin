@@ -56,6 +56,14 @@ class RS_Interlinker_Meta_Box {
         $keywords      = get_post_meta( $post->ID, self::META_KEY, true );
         $added_html    = get_post_meta( $post->ID, self::META_ADDED_HTML, true );
         $processed     = get_post_meta( $post->ID, self::META_PROCESSED, true );
+
+        // Debug info (can be removed later)
+        if ( current_user_can( 'manage_options' ) ) {
+            echo '<p style="background:#fffbcc;padding:5px;font-size:11px;margin-bottom:10px;">';
+            echo '<strong>Debug:</strong> Processed: ' . ( $processed ? 'Yes (' . esc_html( $processed ) . ')' : 'No' );
+            echo ' | Has HTML: ' . ( $added_html ? 'Yes (' . strlen( $added_html ) . ' chars)' : 'No' );
+            echo '</p>';
+        }
         ?>
         <p>
             <label for="rs-interlinker-keywords">
