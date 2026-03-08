@@ -3,7 +3,7 @@
  * Plugin Name: RS Smart Interlinker
  * Plugin URI: https://example.com/rs-smart-interlinker
  * Description: Automatically interlinks content across post types using AI-powered contextual linking via Claude AI. Processes posts and saves links directly to database.
- * Version: 2.0.0
+ * Version: 2.1.0
  * Author: RS Development
  * Author URI: https://example.com
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Plugin constants
-define( 'RS_INTERLINKER_VERSION', '2.0.0' );
+define( 'RS_INTERLINKER_VERSION', '2.1.0' );
 define( 'RS_INTERLINKER_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'RS_INTERLINKER_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'RS_INTERLINKER_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );
