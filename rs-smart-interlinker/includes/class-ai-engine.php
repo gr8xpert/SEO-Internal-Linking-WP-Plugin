@@ -285,9 +285,11 @@ Return ONLY the JSON, no markdown fences, no explanation.';
     }
 
     /**
-     * Make API call to OpenRouter
+     * Make API call to OpenRouter with retry logic
      */
-    private function call_api( $api_key, $model, $prompt ) {
+    private function call_api( $api_key, $model, $prompt, $retry_count = 0 ) {
+        $max_retries = 2;
+
         $body = array(
             'model'      => $model,
             'messages'   => array(
@@ -320,16 +322,30 @@ Return ONLY the JSON, no markdown fences, no explanation.';
         }
 
         $status_code = wp_remote_retrieve_response_code( $response );
-        $body = json_decode( wp_remote_retrieve_body( $response ), true );
+        $response_body = json_decode( wp_remote_retrieve_body( $response ), true );
+
+        // Handle rate limiting (429) with retry
+        if ( $status_code === 429 && $retry_count < $max_retries ) {
+            error_log( 'RS Interlinker: Rate limited, retrying in 5 seconds...' );
+            sleep( 5 );
+            return $this->call_api( $api_key, $model, $prompt, $retry_count + 1 );
+        }
+
+        // Handle server errors (5xx) with retry
+        if ( $status_code >= 500 && $retry_count < $max_retries ) {
+            error_log( 'RS Interlinker: Server error ' . $status_code . ', retrying in 3 seconds...' );
+            sleep( 3 );
+            return $this->call_api( $api_key, $model, $prompt, $retry_count + 1 );
+        }
 
         if ( $status_code !== 200 ) {
-            $error_msg = isset( $body['error']['message'] ) ? $body['error']['message'] : "HTTP $status_code";
+            $error_msg = isset( $response_body['error']['message'] ) ? $response_body['error']['message'] : "HTTP $status_code";
             error_log( 'RS Interlinker API Error: ' . $error_msg );
             return false;
         }
 
-        if ( isset( $body['choices'][0]['message']['content'] ) ) {
-            return $body['choices'][0]['message']['content'];
+        if ( isset( $response_body['choices'][0]['message']['content'] ) ) {
+            return $response_body['choices'][0]['message']['content'];
         }
 
         error_log( 'RS Interlinker: Unexpected API response structure' );

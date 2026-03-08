@@ -253,10 +253,10 @@
                     },
                     complete: function() {
                         $status.html('Processing ' + (index + 1) + '/' + total + '... <span class="rs-loading"></span>');
-                        // Small delay to avoid overwhelming the server
+                        // Delay to avoid OpenRouter rate limiting (3 seconds between requests)
                         setTimeout(function() {
                             processNext(index + 1);
-                        }, 500);
+                        }, 3000);
                     }
                 });
             };
