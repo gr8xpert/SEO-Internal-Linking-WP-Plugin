@@ -132,7 +132,9 @@ class RS_Interlinker_AI_Engine {
         $parsed = $this->parse_response( $response );
 
         if ( ! $parsed ) {
-            return array( 'error' => __( 'Failed to parse AI response. Try again.', 'rs-smart-interlinker' ) );
+            // Return first 200 chars of response for debugging
+            $preview = substr( $response, 0, 200 );
+            return array( 'error' => sprintf( __( 'Failed to parse AI response. Response preview: %s...', 'rs-smart-interlinker' ), esc_html( $preview ) ) );
         }
 
         // Validate external URL if present
@@ -362,20 +364,30 @@ Return ONLY the JSON, no markdown fences, no explanation.';
      * Parse AI response JSON
      */
     private function parse_response( $response ) {
+        $original_response = $response;
+
         // Clean up response - remove markdown fences if present
         $response = trim( $response );
         $response = preg_replace( '/^```json\s*/i', '', $response );
         $response = preg_replace( '/^```\s*/i', '', $response );
         $response = preg_replace( '/\s*```$/i', '', $response );
 
+        // Try to extract JSON object from response (in case there's extra text)
+        if ( preg_match( '/\{[\s\S]*\}/', $response, $matches ) ) {
+            $response = $matches[0];
+        }
+
         $data = json_decode( $response, true );
 
         if ( json_last_error() !== JSON_ERROR_NONE ) {
+            error_log( 'RS Interlinker JSON Parse Error: ' . json_last_error_msg() );
+            error_log( 'RS Interlinker Raw Response: ' . substr( $original_response, 0, 500 ) );
             return false;
         }
 
         // Validate structure
         if ( ! isset( $data['sentence'] ) || ! isset( $data['internal_links'] ) ) {
+            error_log( 'RS Interlinker: Missing required fields in response. Keys: ' . implode( ', ', array_keys( $data ) ) );
             return false;
         }
 
