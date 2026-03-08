@@ -13,6 +13,8 @@
             this.bindEvents();
         },
 
+        queueStatusInterval: null,
+
         /**
          * Bind event handlers
          */
@@ -25,6 +27,13 @@
             $(document).on('click', '.rs-process-post', this.processPost.bind(this));
             $(document).on('click', '.rs-remove-links', this.removeLinks.bind(this));
             $('#rs-process-all').on('click', this.processAll.bind(this));
+
+            // Queue controls
+            $('#rs-start-queue').on('click', this.startQueue.bind(this));
+            $('#rs-stop-queue').on('click', this.stopQueue.bind(this));
+
+            // Check queue status on page load
+            this.checkQueueStatus();
         },
 
         /**
@@ -262,6 +271,197 @@
             };
 
             processNext(0);
+        },
+
+        /**
+         * Start background queue processing
+         */
+        startQueue: function(e) {
+            e.preventDefault();
+
+            var self = this;
+            var $button = $('#rs-start-queue');
+
+            if (!confirm('Start background processing? This will process all unprocessed posts automatically.')) {
+                return;
+            }
+
+            $button.prop('disabled', true).text('Starting...');
+
+            $.ajax({
+                url: rsInterlinker.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'rs_interlinker_start_queue',
+                    nonce: rsInterlinker.nonce
+                },
+                success: function(response) {
+                    if (response.success) {
+                        self.showQueueStatus(true);
+                        self.startStatusPolling();
+                    } else {
+                        alert(response.data || 'Failed to start queue');
+                        $button.prop('disabled', false).text('Start Background Processing');
+                    }
+                },
+                error: function() {
+                    alert('Error starting queue');
+                    $button.prop('disabled', false).text('Start Background Processing');
+                }
+            });
+        },
+
+        /**
+         * Stop background queue processing
+         */
+        stopQueue: function(e) {
+            e.preventDefault();
+
+            var self = this;
+
+            if (!confirm('Stop background processing?')) {
+                return;
+            }
+
+            $.ajax({
+                url: rsInterlinker.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'rs_interlinker_stop_queue',
+                    nonce: rsInterlinker.nonce
+                },
+                success: function(response) {
+                    self.stopStatusPolling();
+                    self.showQueueStatus(false);
+                    $('#rs-start-queue').prop('disabled', false).text('Start Background Processing');
+                },
+                error: function() {
+                    alert('Error stopping queue');
+                }
+            });
+        },
+
+        /**
+         * Check queue status
+         */
+        checkQueueStatus: function() {
+            var self = this;
+
+            $.ajax({
+                url: rsInterlinker.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'rs_interlinker_queue_status',
+                    nonce: rsInterlinker.nonce
+                },
+                success: function(response) {
+                    if (response.success && response.data.running) {
+                        self.showQueueStatus(true);
+                        self.updateQueueDisplay(response.data);
+                        self.startStatusPolling();
+                    } else if (response.success && response.data.completed_at && response.data.processed > 0) {
+                        // Show completed status
+                        self.showCompletedStatus(response.data);
+                    }
+                }
+            });
+        },
+
+        /**
+         * Start polling for status updates
+         */
+        startStatusPolling: function() {
+            var self = this;
+
+            if (this.queueStatusInterval) {
+                clearInterval(this.queueStatusInterval);
+            }
+
+            this.queueStatusInterval = setInterval(function() {
+                $.ajax({
+                    url: rsInterlinker.ajaxUrl,
+                    type: 'POST',
+                    data: {
+                        action: 'rs_interlinker_queue_status',
+                        nonce: rsInterlinker.nonce
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            self.updateQueueDisplay(response.data);
+
+                            if (!response.data.running) {
+                                self.stopStatusPolling();
+                                self.showCompletedStatus(response.data);
+                            }
+                        }
+                    }
+                });
+            }, 10000); // Poll every 10 seconds
+        },
+
+        /**
+         * Stop polling
+         */
+        stopStatusPolling: function() {
+            if (this.queueStatusInterval) {
+                clearInterval(this.queueStatusInterval);
+                this.queueStatusInterval = null;
+            }
+        },
+
+        /**
+         * Show/hide queue status box
+         */
+        showQueueStatus: function(show) {
+            if (show) {
+                $('#rs-queue-status-box').show();
+                $('#rs-queue-completed-box').hide();
+                $('#rs-start-queue').hide();
+                $('#rs-stop-queue').show();
+            } else {
+                $('#rs-queue-status-box').hide();
+                $('#rs-start-queue').show().prop('disabled', false).text('Start Background Processing');
+                $('#rs-stop-queue').hide();
+            }
+        },
+
+        /**
+         * Update queue display
+         */
+        updateQueueDisplay: function(data) {
+            var percent = data.total > 0 ? Math.round((data.processed / data.total) * 100) : 0;
+
+            $('#rs-queue-processed').text(data.processed);
+            $('#rs-queue-total').text(data.total);
+            $('#rs-queue-percent').text(percent);
+            $('#rs-queue-remaining').text(data.remaining);
+            $('#rs-queue-errors').text(data.errors);
+            $('#rs-queue-lastrun').text(data.last_run || '-');
+            $('#rs-queue-progress-bar').css('width', percent + '%');
+
+            // Calculate ETA
+            if (data.remaining > 0 && data.processed > 0) {
+                var postsPerMin = 1; // ~2 posts per 2 minutes
+                var minsRemaining = Math.ceil(data.remaining / postsPerMin);
+                var hours = Math.floor(minsRemaining / 60);
+                var mins = minsRemaining % 60;
+                var eta = hours > 0 ? hours + 'h ' + mins + 'm' : mins + ' minutes';
+                $('#rs-queue-eta').text('Estimated time remaining: ~' + eta);
+            } else {
+                $('#rs-queue-eta').text('');
+            }
+        },
+
+        /**
+         * Show completed status
+         */
+        showCompletedStatus: function(data) {
+            $('#rs-queue-status-box').hide();
+            $('#rs-queue-completed-box').show();
+            $('#rs-queue-final-processed').text(data.processed);
+            $('#rs-queue-final-errors').text(data.errors);
+            $('#rs-start-queue').show().prop('disabled', false).text('Start Background Processing');
+            $('#rs-stop-queue').hide();
         }
     };
 

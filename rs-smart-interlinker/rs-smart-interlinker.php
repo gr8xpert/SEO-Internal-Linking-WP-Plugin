@@ -42,6 +42,7 @@ class RS_Smart_Interlinker {
     public $ai_engine;
     public $url_validator;
     public $meta_box;
+    public $queue;
 
     /**
      * Get single instance of the class
@@ -72,6 +73,7 @@ class RS_Smart_Interlinker {
         require_once RS_INTERLINKER_PLUGIN_DIR . 'includes/class-url-validator.php';
         require_once RS_INTERLINKER_PLUGIN_DIR . 'includes/class-meta-box.php';
         require_once RS_INTERLINKER_PLUGIN_DIR . 'includes/class-processor.php';
+        require_once RS_INTERLINKER_PLUGIN_DIR . 'includes/class-queue.php';
     }
 
     /**
@@ -84,6 +86,10 @@ class RS_Smart_Interlinker {
         $this->processor     = new RS_Interlinker_Processor( $this->indexer, $this->ai_engine );
         $this->settings      = new RS_Interlinker_Settings( $this->indexer, $this->processor );
         $this->meta_box      = new RS_Interlinker_Meta_Box();
+        $this->queue         = new RS_Interlinker_Queue( $this->processor );
+
+        // Register cron interval
+        add_filter( 'cron_schedules', array( 'RS_Interlinker_Queue', 'register_cron_interval' ) );
     }
 
     /**
@@ -155,6 +161,9 @@ class RS_Smart_Interlinker {
      * Plugin deactivation
      */
     public function deactivate() {
+        // Clear scheduled queue processing
+        wp_clear_scheduled_hook( RS_Interlinker_Queue::CRON_HOOK );
+
         // Flush rewrite rules
         flush_rewrite_rules();
     }

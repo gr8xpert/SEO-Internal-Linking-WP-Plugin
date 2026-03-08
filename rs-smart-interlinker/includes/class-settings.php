@@ -581,13 +581,67 @@ class RS_Interlinker_Settings {
             </div>
 
             <?php if ( $unprocessed_count > 0 ) : ?>
-                <p>
-                    <button type="button" id="rs-process-all" class="button button-primary">
-                        <?php esc_html_e( 'Process All Unprocessed Posts', 'rs-smart-interlinker' ); ?>
+                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    <button type="button" id="rs-start-queue" class="button button-primary">
+                        <?php esc_html_e( 'Start Background Processing', 'rs-smart-interlinker' ); ?>
+                    </button>
+                    <button type="button" id="rs-stop-queue" class="button button-secondary" style="display:none;">
+                        <?php esc_html_e( 'Stop Processing', 'rs-smart-interlinker' ); ?>
+                    </button>
+                    <button type="button" id="rs-process-all" class="button">
+                        <?php esc_html_e( 'Process All (Browser)', 'rs-smart-interlinker' ); ?>
                     </button>
                     <span id="rs-process-all-status"></span>
+                </div>
+                <p class="description" style="margin-top: 10px;">
+                    <?php esc_html_e( 'Background Processing: Runs via WP Cron, processes 2 posts every 2 minutes. Safe for large sites.', 'rs-smart-interlinker' ); ?>
                 </p>
             <?php endif; ?>
+
+            <!-- Queue Status Box -->
+            <div id="rs-queue-status-box" style="margin-top: 20px; padding: 15px; background: #f0f6fc; border: 1px solid #c3d5e8; border-radius: 4px; display: none;">
+                <h3 style="margin: 0 0 10px 0;">
+                    <span class="dashicons dashicons-update" style="animation: rs-spin 2s linear infinite;"></span>
+                    <?php esc_html_e( 'Background Processing Status', 'rs-smart-interlinker' ); ?>
+                </h3>
+                <div style="display: flex; gap: 30px; flex-wrap: wrap;">
+                    <div>
+                        <strong><?php esc_html_e( 'Progress:', 'rs-smart-interlinker' ); ?></strong>
+                        <span id="rs-queue-processed">0</span> / <span id="rs-queue-total">0</span>
+                        (<span id="rs-queue-percent">0</span>%)
+                    </div>
+                    <div>
+                        <strong><?php esc_html_e( 'Remaining:', 'rs-smart-interlinker' ); ?></strong>
+                        <span id="rs-queue-remaining">0</span>
+                    </div>
+                    <div>
+                        <strong><?php esc_html_e( 'Errors:', 'rs-smart-interlinker' ); ?></strong>
+                        <span id="rs-queue-errors">0</span>
+                    </div>
+                    <div>
+                        <strong><?php esc_html_e( 'Last Run:', 'rs-smart-interlinker' ); ?></strong>
+                        <span id="rs-queue-lastrun">-</span>
+                    </div>
+                </div>
+                <div style="margin-top: 10px;">
+                    <div style="background: #ddd; border-radius: 3px; height: 20px; overflow: hidden;">
+                        <div id="rs-queue-progress-bar" style="background: #2271b1; height: 100%; width: 0%; transition: width 0.5s;"></div>
+                    </div>
+                </div>
+                <p id="rs-queue-eta" style="margin: 10px 0 0 0; color: #666;"></p>
+            </div>
+
+            <!-- Completed Status Box -->
+            <div id="rs-queue-completed-box" style="margin-top: 20px; padding: 15px; background: #d4edda; border: 1px solid #28a745; border-radius: 4px; display: none;">
+                <h3 style="margin: 0; color: #155724;">
+                    <span class="dashicons dashicons-yes-alt"></span>
+                    <?php esc_html_e( 'Background Processing Completed!', 'rs-smart-interlinker' ); ?>
+                </h3>
+                <p style="margin: 10px 0 0 0;">
+                    <?php esc_html_e( 'Processed:', 'rs-smart-interlinker' ); ?> <strong id="rs-queue-final-processed">0</strong>
+                    | <?php esc_html_e( 'Errors:', 'rs-smart-interlinker' ); ?> <strong id="rs-queue-final-errors">0</strong>
+                </p>
+            </div>
         </div>
 
         <div class="rs-interlinker-section">
