@@ -36,11 +36,11 @@ class RS_Interlinker_Meta_Box {
         foreach ( $post_types as $post_type ) {
             add_meta_box(
                 'rs-interlinker-keywords',
-                __( 'RS Smart Interlinker — Custom Keywords', 'rs-smart-interlinker' ),
+                __( 'RS Smart Interlinker', 'rs-smart-interlinker' ),
                 array( $this, 'render_meta_box' ),
                 $post_type,
-                'side',
-                'default'
+                'normal',
+                'high'
             );
         }
     }
@@ -57,48 +57,59 @@ class RS_Interlinker_Meta_Box {
         $added_html    = get_post_meta( $post->ID, self::META_ADDED_HTML, true );
         $processed     = get_post_meta( $post->ID, self::META_PROCESSED, true );
         ?>
-        <p>
-            <label for="rs-interlinker-keywords">
-                <strong><?php esc_html_e( 'Custom Keywords (comma-separated):', 'rs-smart-interlinker' ); ?></strong>
-            </label>
-        </p>
-        <textarea
-            id="rs-interlinker-keywords"
-            name="rs_interlinker_keywords"
-            rows="3"
-            style="width: 100%;"
-            placeholder="<?php esc_attr_e( 'e.g., Marbella, Costa del Sol, Spain', 'rs-smart-interlinker' ); ?>"
-        ><?php echo esc_textarea( $keywords ); ?></textarea>
-        <p class="description">
-            <?php esc_html_e( 'Override auto-extracted keywords. Leave empty for automatic extraction.', 'rs-smart-interlinker' ); ?>
-        </p>
+        <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+            <!-- Left Column: Keywords -->
+            <div style="flex: 1; min-width: 250px;">
+                <p>
+                    <label for="rs-interlinker-keywords">
+                        <strong><?php esc_html_e( 'Custom Keywords (comma-separated):', 'rs-smart-interlinker' ); ?></strong>
+                    </label>
+                </p>
+                <textarea
+                    id="rs-interlinker-keywords"
+                    name="rs_interlinker_keywords"
+                    rows="3"
+                    style="width: 100%;"
+                    placeholder="<?php esc_attr_e( 'e.g., Marbella, Costa del Sol, Spain', 'rs-smart-interlinker' ); ?>"
+                ><?php echo esc_textarea( $keywords ); ?></textarea>
+                <p class="description">
+                    <?php esc_html_e( 'Override auto-extracted keywords. Leave empty for automatic extraction.', 'rs-smart-interlinker' ); ?>
+                </p>
+            </div>
 
-        <?php if ( $processed ) : ?>
-            <hr style="margin: 15px 0;">
-            <p>
-                <label for="rs-interlinker-generated-html">
-                    <strong><?php esc_html_e( 'Generated Content (editable):', 'rs-smart-interlinker' ); ?></strong>
-                </label>
-            </p>
-            <textarea
-                id="rs-interlinker-generated-html"
-                name="rs_interlinker_generated_html"
-                rows="5"
-                style="width: 100%;"
-            ><?php echo esc_textarea( $added_html ); ?></textarea>
-            <p class="description">
-                <?php esc_html_e( 'Edit the AI-generated sentence. HTML links are allowed.', 'rs-smart-interlinker' ); ?>
-            </p>
-            <p style="margin-top: 10px; padding: 8px; background: #f0f0f1; border-radius: 3px;">
-                <strong><?php esc_html_e( 'Preview:', 'rs-smart-interlinker' ); ?></strong><br>
-                <?php echo wp_kses( $added_html, $this->get_allowed_html() ); ?>
-            </p>
-        <?php else : ?>
-            <hr style="margin: 15px 0;">
-            <p style="color: #666; font-style: italic;">
-                <?php esc_html_e( 'No content generated yet. Use "Process" button in RS Interlinker settings to generate AI content.', 'rs-smart-interlinker' ); ?>
-            </p>
-        <?php endif; ?>
+            <!-- Right Column: Generated Content -->
+            <div style="flex: 2; min-width: 400px;">
+                <?php if ( $processed ) : ?>
+                    <p>
+                        <label for="rs-interlinker-generated-html">
+                            <strong><?php esc_html_e( 'Generated Content (editable):', 'rs-smart-interlinker' ); ?></strong>
+                            <span style="color: #46b450; font-weight: normal; margin-left: 10px;">✓ <?php esc_html_e( 'Processed', 'rs-smart-interlinker' ); ?></span>
+                        </label>
+                    </p>
+                    <textarea
+                        id="rs-interlinker-generated-html"
+                        name="rs_interlinker_generated_html"
+                        rows="4"
+                        style="width: 100%; font-family: monospace; font-size: 12px;"
+                    ><?php echo esc_textarea( $added_html ); ?></textarea>
+                    <p class="description">
+                        <?php esc_html_e( 'Edit the AI-generated sentence. HTML links are allowed.', 'rs-smart-interlinker' ); ?>
+                    </p>
+                    <div style="margin-top: 10px; padding: 12px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px;">
+                        <strong><?php esc_html_e( 'Preview:', 'rs-smart-interlinker' ); ?></strong>
+                        <p style="margin: 8px 0 0 0;"><?php echo wp_kses( $added_html, $this->get_allowed_html() ); ?></p>
+                    </div>
+                <?php else : ?>
+                    <p>
+                        <strong><?php esc_html_e( 'Generated Content:', 'rs-smart-interlinker' ); ?></strong>
+                        <span style="color: #dba617; font-weight: normal; margin-left: 10px;">⏳ <?php esc_html_e( 'Not Processed', 'rs-smart-interlinker' ); ?></span>
+                    </p>
+                    <p style="color: #666; font-style: italic; padding: 15px; background: #f9f9f9; border-radius: 4px;">
+                        <?php esc_html_e( 'No content generated yet. Use "Process" button in RS Interlinker settings to generate AI content.', 'rs-smart-interlinker' ); ?>
+                    </p>
+                <?php endif; ?>
+            </div>
+        </div>
         <?php
     }
 
