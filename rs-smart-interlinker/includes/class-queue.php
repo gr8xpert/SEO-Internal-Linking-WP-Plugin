@@ -9,27 +9,27 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-class RS_Interlinker_Queue {
+class SPM_Interlinker_Queue {
 
     /**
      * Option name for queue
      */
-    const QUEUE_OPTION = 'rs_interlinker_queue';
+    const QUEUE_OPTION = 'spm_interlinker_queue';
 
     /**
      * Option name for queue status
      */
-    const STATUS_OPTION = 'rs_interlinker_queue_status';
+    const STATUS_OPTION = 'spm_interlinker_queue_status';
 
     /**
      * Cron hook name
      */
-    const CRON_HOOK = 'rs_interlinker_process_queue';
+    const CRON_HOOK = 'spm_interlinker_process_queue';
 
     /**
-     * Posts to process per cron run
+     * Default posts to process per cron run
      */
-    const BATCH_SIZE = 2;
+    const DEFAULT_BATCH_SIZE = 2;
 
     /**
      * Processor instance
@@ -46,9 +46,9 @@ class RS_Interlinker_Queue {
         add_action( self::CRON_HOOK, array( $this, 'process_queue' ) );
 
         // AJAX handlers
-        add_action( 'wp_ajax_rs_interlinker_start_queue', array( $this, 'ajax_start_queue' ) );
-        add_action( 'wp_ajax_rs_interlinker_stop_queue', array( $this, 'ajax_stop_queue' ) );
-        add_action( 'wp_ajax_rs_interlinker_queue_status', array( $this, 'ajax_queue_status' ) );
+        add_action( 'wp_ajax_spm_interlinker_start_queue', array( $this, 'ajax_start_queue' ) );
+        add_action( 'wp_ajax_spm_interlinker_stop_queue', array( $this, 'ajax_stop_queue' ) );
+        add_action( 'wp_ajax_spm_interlinker_queue_status', array( $this, 'ajax_queue_status' ) );
     }
 
     /**
@@ -68,7 +68,7 @@ class RS_Interlinker_Queue {
         if ( empty( $queue ) ) {
             return array(
                 'success' => false,
-                'message' => __( 'No unprocessed posts found.', 'rs-smart-interlinker' ),
+                'message' => __( 'No unprocessed posts found.', 'spm-interlinker' ),
             );
         }
 
@@ -87,12 +87,12 @@ class RS_Interlinker_Queue {
 
         // Schedule cron event (every 2 minutes)
         if ( ! wp_next_scheduled( self::CRON_HOOK ) ) {
-            wp_schedule_event( time(), 'rs_interlinker_interval', self::CRON_HOOK );
+            wp_schedule_event( time(), 'spm_interlinker_interval', self::CRON_HOOK );
         }
 
         return array(
             'success' => true,
-            'message' => sprintf( __( 'Started processing %d posts in background.', 'rs-smart-interlinker' ), count( $queue ) ),
+            'message' => sprintf( __( 'Started processing %d posts in background.', 'spm-interlinker' ), count( $queue ) ),
             'total'   => count( $queue ),
         );
     }
@@ -112,8 +112,18 @@ class RS_Interlinker_Queue {
 
         return array(
             'success' => true,
-            'message' => __( 'Background processing stopped.', 'rs-smart-interlinker' ),
+            'message' => __( 'Background processing stopped.', 'spm-interlinker' ),
         );
+    }
+
+    /**
+     * Get batch size from options
+     */
+    private function get_batch_size() {
+        $options = get_option( 'spm_interlinker_options', array() );
+        $batch_size = isset( $options['batch_size'] ) ? absint( $options['batch_size'] ) : self::DEFAULT_BATCH_SIZE;
+        // Ensure minimum of 1 and maximum of 20
+        return max( 1, min( 20, $batch_size ) );
     }
 
     /**
@@ -132,8 +142,9 @@ class RS_Interlinker_Queue {
             return;
         }
 
-        // Process batch
-        $batch = array_splice( $queue, 0, self::BATCH_SIZE );
+        // Process batch (configurable)
+        $batch_size = $this->get_batch_size();
+        $batch = array_splice( $queue, 0, $batch_size );
         $processed = 0;
         $errors = 0;
 
@@ -144,7 +155,7 @@ class RS_Interlinker_Queue {
                 $processed++;
             } else {
                 $errors++;
-                error_log( 'RS Interlinker Queue: Failed to process post ' . $post_id . ': ' . $result['message'] );
+                error_log( 'SPM Interlinker Queue: Failed to process post ' . $post_id . ': ' . $result['message'] );
             }
 
             // Small delay between posts
@@ -192,10 +203,10 @@ class RS_Interlinker_Queue {
      * AJAX: Start queue
      */
     public function ajax_start_queue() {
-        check_ajax_referer( 'rs_interlinker_nonce', 'nonce' );
+        check_ajax_referer( 'spm_interlinker_nonce', 'nonce' );
 
         if ( ! current_user_can( 'manage_options' ) ) {
-            wp_send_json_error( __( 'Permission denied.', 'rs-smart-interlinker' ) );
+            wp_send_json_error( __( 'Permission denied.', 'spm-interlinker' ) );
         }
 
         $result = $this->start_queue();
@@ -211,10 +222,10 @@ class RS_Interlinker_Queue {
      * AJAX: Stop queue
      */
     public function ajax_stop_queue() {
-        check_ajax_referer( 'rs_interlinker_nonce', 'nonce' );
+        check_ajax_referer( 'spm_interlinker_nonce', 'nonce' );
 
         if ( ! current_user_can( 'manage_options' ) ) {
-            wp_send_json_error( __( 'Permission denied.', 'rs-smart-interlinker' ) );
+            wp_send_json_error( __( 'Permission denied.', 'spm-interlinker' ) );
         }
 
         $result = $this->stop_queue();
@@ -225,10 +236,10 @@ class RS_Interlinker_Queue {
      * AJAX: Get queue status
      */
     public function ajax_queue_status() {
-        check_ajax_referer( 'rs_interlinker_nonce', 'nonce' );
+        check_ajax_referer( 'spm_interlinker_nonce', 'nonce' );
 
         if ( ! current_user_can( 'manage_options' ) ) {
-            wp_send_json_error( __( 'Permission denied.', 'rs-smart-interlinker' ) );
+            wp_send_json_error( __( 'Permission denied.', 'spm-interlinker' ) );
         }
 
         $status = $this->get_status();
@@ -239,9 +250,9 @@ class RS_Interlinker_Queue {
      * Register custom cron interval
      */
     public static function register_cron_interval( $schedules ) {
-        $schedules['rs_interlinker_interval'] = array(
+        $schedules['spm_interlinker_interval'] = array(
             'interval' => 120, // 2 minutes
-            'display'  => __( 'Every 2 Minutes', 'rs-smart-interlinker' ),
+            'display'  => __( 'Every 2 Minutes', 'spm-interlinker' ),
         );
         return $schedules;
     }

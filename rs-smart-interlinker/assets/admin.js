@@ -1,11 +1,13 @@
 /**
- * RS Smart Interlinker - Admin JavaScript
+ * SPM Interlinker - Admin JavaScript
  */
 
 (function($) {
     'use strict';
 
-    var RSInterlinker = {
+    // spmInterlinker is set by wp_localize_script with ajaxUrl, nonce, strings
+    // We use a different name for our app object to avoid overwriting it
+    var SPMApp = {
         /**
          * Initialize
          */
@@ -32,6 +34,9 @@
             $('#rs-start-queue').on('click', this.startQueue.bind(this));
             $('#rs-stop-queue').on('click', this.stopQueue.bind(this));
 
+            // Batch size
+            $('#rs-save-batch-size').on('click', this.saveBatchSize.bind(this));
+
             // Check queue status on page load
             this.checkQueueStatus();
         },
@@ -49,21 +54,64 @@
             $status.removeClass('success error').html('Testing... <span class="rs-loading"></span>');
 
             $.ajax({
-                url: rsInterlinker.ajaxUrl,
+                url: spmInterlinker.ajaxUrl,
                 type: 'POST',
                 data: {
-                    action: 'rs_interlinker_test_api',
-                    nonce: rsInterlinker.nonce
+                    action: 'spm_interlinker_test_api',
+                    nonce: spmInterlinker.nonce
                 },
                 success: function(response) {
                     if (response.success) {
                         $status.addClass('success').text(response.data.message);
                     } else {
-                        $status.addClass('error').text(response.data || rsInterlinker.strings.error);
+                        $status.addClass('error').text(response.data || spmInterlinker.strings.error);
                     }
                 },
                 error: function() {
-                    $status.addClass('error').text(rsInterlinker.strings.error);
+                    $status.addClass('error').text(spmInterlinker.strings.error);
+                },
+                complete: function() {
+                    $button.prop('disabled', false);
+                }
+            });
+        },
+
+        /**
+         * Save batch size
+         */
+        saveBatchSize: function(e) {
+            e.preventDefault();
+
+            var $button = $('#rs-save-batch-size');
+            var $input = $('#rs-batch-size');
+            var $status = $('#rs-batch-size-status');
+            var batchSize = parseInt($input.val(), 10);
+
+            if (isNaN(batchSize) || batchSize < 1 || batchSize > 20) {
+                $status.addClass('error').text('Please enter a value between 1 and 20');
+                return;
+            }
+
+            $button.prop('disabled', true);
+            $status.removeClass('success error').html('Saving... <span class="rs-loading"></span>');
+
+            $.ajax({
+                url: spmInterlinker.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'spm_interlinker_save_batch_size',
+                    nonce: spmInterlinker.nonce,
+                    batch_size: batchSize
+                },
+                success: function(response) {
+                    if (response.success) {
+                        $status.addClass('success').text(response.data.message);
+                    } else {
+                        $status.addClass('error').text(response.data || spmInterlinker.strings.error);
+                    }
+                },
+                error: function() {
+                    $status.addClass('error').text(spmInterlinker.strings.error);
                 },
                 complete: function() {
                     $button.prop('disabled', false);
@@ -84,21 +132,21 @@
             $status.removeClass('success error').html('Rebuilding... <span class="rs-loading"></span>');
 
             $.ajax({
-                url: rsInterlinker.ajaxUrl,
+                url: spmInterlinker.ajaxUrl,
                 type: 'POST',
                 data: {
-                    action: 'rs_interlinker_rebuild_index',
-                    nonce: rsInterlinker.nonce
+                    action: 'spm_interlinker_rebuild_index',
+                    nonce: spmInterlinker.nonce
                 },
                 success: function(response) {
                     if (response.success) {
                         $status.addClass('success').text(response.data.message);
                     } else {
-                        $status.addClass('error').text(response.data || rsInterlinker.strings.error);
+                        $status.addClass('error').text(response.data || spmInterlinker.strings.error);
                     }
                 },
                 error: function() {
-                    $status.addClass('error').text(rsInterlinker.strings.error);
+                    $status.addClass('error').text(spmInterlinker.strings.error);
                 },
                 complete: function() {
                     $button.prop('disabled', false);
@@ -116,33 +164,33 @@
             var postId = $button.data('post-id');
             var $row = $button.closest('tr');
 
-            $button.prop('disabled', true).text(rsInterlinker.strings.processing);
+            $button.prop('disabled', true).text(spmInterlinker.strings.processing);
 
             $.ajax({
-                url: rsInterlinker.ajaxUrl,
+                url: spmInterlinker.ajaxUrl,
                 type: 'POST',
                 data: {
-                    action: 'rs_interlinker_process_post',
-                    nonce: rsInterlinker.nonce,
+                    action: 'spm_interlinker_process_post',
+                    nonce: spmInterlinker.nonce,
                     post_id: postId
                 },
                 success: function(response) {
                     if (response.success) {
                         // Update row
                         $row.find('.column-status').html(
-                            '<span class="rs-status rs-status-processed">' + rsInterlinker.strings.processed + '</span>'
+                            '<span class="rs-status rs-status-processed">' + spmInterlinker.strings.processed + '</span>'
                         );
                         $row.find('.column-links').text(response.data.links_count);
                         $row.find('.column-actions').html(
                             '<button type="button" class="button button-small rs-remove-links" data-post-id="' + postId + '">Remove Links</button>'
                         );
                     } else {
-                        alert(response.data || rsInterlinker.strings.error);
+                        alert(response.data || spmInterlinker.strings.error);
                         $button.prop('disabled', false).text('Process');
                     }
                 },
                 error: function() {
-                    alert(rsInterlinker.strings.error);
+                    alert(spmInterlinker.strings.error);
                     $button.prop('disabled', false).text('Process');
                 }
             });
@@ -154,7 +202,7 @@
         removeLinks: function(e) {
             e.preventDefault();
 
-            if (!confirm(rsInterlinker.strings.confirm_remove)) {
+            if (!confirm(spmInterlinker.strings.confirm_remove)) {
                 return;
             }
 
@@ -162,14 +210,14 @@
             var postId = $button.data('post-id');
             var $row = $button.closest('tr');
 
-            $button.prop('disabled', true).text(rsInterlinker.strings.removing);
+            $button.prop('disabled', true).text(spmInterlinker.strings.removing);
 
             $.ajax({
-                url: rsInterlinker.ajaxUrl,
+                url: spmInterlinker.ajaxUrl,
                 type: 'POST',
                 data: {
-                    action: 'rs_interlinker_remove_links',
-                    nonce: rsInterlinker.nonce,
+                    action: 'spm_interlinker_remove_links',
+                    nonce: spmInterlinker.nonce,
                     post_id: postId
                 },
                 success: function(response) {
@@ -183,12 +231,12 @@
                             '<button type="button" class="button button-small button-primary rs-process-post" data-post-id="' + postId + '">Process</button>'
                         );
                     } else {
-                        alert(response.data || rsInterlinker.strings.error);
+                        alert(response.data || spmInterlinker.strings.error);
                         $button.prop('disabled', false).text('Remove Links');
                     }
                 },
                 error: function() {
-                    alert(rsInterlinker.strings.error);
+                    alert(spmInterlinker.strings.error);
                     $button.prop('disabled', false).text('Remove Links');
                 }
             });
@@ -200,7 +248,7 @@
         processAll: function(e) {
             e.preventDefault();
 
-            if (!confirm(rsInterlinker.strings.confirm_process_all)) {
+            if (!confirm(spmInterlinker.strings.confirm_process_all)) {
                 return;
             }
 
@@ -234,11 +282,11 @@
                 $btn.prop('disabled', true).text('...');
 
                 $.ajax({
-                    url: rsInterlinker.ajaxUrl,
+                    url: spmInterlinker.ajaxUrl,
                     type: 'POST',
                     data: {
-                        action: 'rs_interlinker_process_post',
-                        nonce: rsInterlinker.nonce,
+                        action: 'spm_interlinker_process_post',
+                        nonce: spmInterlinker.nonce,
                         post_id: postId
                     },
                     success: function(response) {
@@ -289,11 +337,11 @@
             $button.prop('disabled', true).text('Starting...');
 
             $.ajax({
-                url: rsInterlinker.ajaxUrl,
+                url: spmInterlinker.ajaxUrl,
                 type: 'POST',
                 data: {
-                    action: 'rs_interlinker_start_queue',
-                    nonce: rsInterlinker.nonce
+                    action: 'spm_interlinker_start_queue',
+                    nonce: spmInterlinker.nonce
                 },
                 success: function(response) {
                     if (response.success) {
@@ -324,11 +372,11 @@
             }
 
             $.ajax({
-                url: rsInterlinker.ajaxUrl,
+                url: spmInterlinker.ajaxUrl,
                 type: 'POST',
                 data: {
-                    action: 'rs_interlinker_stop_queue',
-                    nonce: rsInterlinker.nonce
+                    action: 'spm_interlinker_stop_queue',
+                    nonce: spmInterlinker.nonce
                 },
                 success: function(response) {
                     self.stopStatusPolling();
@@ -348,11 +396,11 @@
             var self = this;
 
             $.ajax({
-                url: rsInterlinker.ajaxUrl,
+                url: spmInterlinker.ajaxUrl,
                 type: 'POST',
                 data: {
-                    action: 'rs_interlinker_queue_status',
-                    nonce: rsInterlinker.nonce
+                    action: 'spm_interlinker_queue_status',
+                    nonce: spmInterlinker.nonce
                 },
                 success: function(response) {
                     if (response.success && response.data.running) {
@@ -379,11 +427,11 @@
 
             this.queueStatusInterval = setInterval(function() {
                 $.ajax({
-                    url: rsInterlinker.ajaxUrl,
+                    url: spmInterlinker.ajaxUrl,
                     type: 'POST',
                     data: {
-                        action: 'rs_interlinker_queue_status',
-                        nonce: rsInterlinker.nonce
+                        action: 'spm_interlinker_queue_status',
+                        nonce: spmInterlinker.nonce
                     },
                     success: function(response) {
                         if (response.success) {
@@ -467,7 +515,7 @@
 
     // Initialize on document ready
     $(document).ready(function() {
-        RSInterlinker.init();
+        SPMApp.init();
     });
 
 })(jQuery);

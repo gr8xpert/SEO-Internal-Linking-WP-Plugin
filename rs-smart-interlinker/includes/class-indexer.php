@@ -9,17 +9,17 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-class RS_Interlinker_Indexer {
+class SPM_Interlinker_Indexer {
 
     /**
      * Option name for storing the index
      */
-    const INDEX_OPTION = 'rs_interlinker_index';
+    const INDEX_OPTION = 'spm_interlinker_index';
 
     /**
      * Meta key for custom keywords
      */
-    const META_KEY = '_rs_interlinker_keywords';
+    const META_KEY = '_spm_interlinker_keywords';
 
     /**
      * Get the keyword index
@@ -36,7 +36,7 @@ class RS_Interlinker_Indexer {
      * @return int Number of posts indexed
      */
     public function rebuild_index() {
-        $options    = get_option( 'rs_interlinker_options', array() );
+        $options    = get_option( 'spm_interlinker_options', array() );
         $post_types = isset( $options['post_types'] ) ? $options['post_types'] : array( 'post', 'page' );
 
         if ( empty( $post_types ) ) {
@@ -88,7 +88,7 @@ class RS_Interlinker_Indexer {
         }
 
         // Auto-extract from enabled sources
-        $options  = get_option( 'rs_interlinker_options', array() );
+        $options  = get_option( 'spm_interlinker_options', array() );
         $keywords = array();
 
         // Source: Post Title
@@ -157,7 +157,7 @@ class RS_Interlinker_Indexer {
         }
 
         // Check if this post type is in our selected types
-        $options    = get_option( 'rs_interlinker_options', array() );
+        $options    = get_option( 'spm_interlinker_options', array() );
         $post_types = isset( $options['post_types'] ) ? $options['post_types'] : array();
 
         if ( ! in_array( $post->post_type, $post_types, true ) ) {
@@ -218,11 +218,13 @@ class RS_Interlinker_Indexer {
 
     /**
      * Get index for use in AI prompts (excludes specific post)
+     * OPTIMIZED: Limits keywords to reduce API costs
      *
      * @param int $exclude_post_id Post ID to exclude
+     * @param int $limit Max keywords to return (default 30 for cost efficiency)
      * @return array Filtered index
      */
-    public function get_index_for_ai( $exclude_post_id ) {
+    public function get_index_for_ai( $exclude_post_id, $limit = 30 ) {
         $index    = $this->get_index();
         $filtered = array();
 
@@ -230,6 +232,19 @@ class RS_Interlinker_Indexer {
             if ( $data['post_id'] != $exclude_post_id ) {
                 $filtered[ $keyword ] = $data['url'];
             }
+        }
+
+        // If we have more keywords than the limit, randomly sample to reduce token usage
+        // This dramatically reduces API costs while still providing good link variety
+        if ( count( $filtered ) > $limit ) {
+            $keys = array_keys( $filtered );
+            shuffle( $keys );
+            $selected_keys = array_slice( $keys, 0, $limit );
+            $limited = array();
+            foreach ( $selected_keys as $key ) {
+                $limited[ $key ] = $filtered[ $key ];
+            }
+            return $limited;
         }
 
         return $filtered;
@@ -266,7 +281,7 @@ class RS_Interlinker_Indexer {
      */
     public function get_stats() {
         $index   = $this->get_index();
-        $options = get_option( 'rs_interlinker_options', array() );
+        $options = get_option( 'spm_interlinker_options', array() );
         $post_types = isset( $options['post_types'] ) ? $options['post_types'] : array();
 
         // Count unique posts in index
@@ -282,7 +297,7 @@ class RS_Interlinker_Indexer {
         $cached_count = $wpdb->get_var(
             $wpdb->prepare(
                 "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE %s",
-                $wpdb->esc_like( '_transient_rs_interlinker_ai_' ) . '%'
+                $wpdb->esc_like( '_transient_spm_interlinker_ai_' ) . '%'
             )
         );
 

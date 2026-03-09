@@ -9,7 +9,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-class RS_Interlinker_URL_Validator {
+class SPM_Interlinker_URL_Validator {
 
     /**
      * Request timeout in seconds

@@ -10,14 +10,14 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-class RS_Interlinker_Processor {
+class SPM_Interlinker_Processor {
 
     /**
      * Meta keys
      */
-    const META_PROCESSED = '_rs_interlinker_processed';
-    const META_ADDED_HTML = '_rs_interlinker_added_html';
-    const META_LINKS_COUNT = '_rs_interlinker_links_count';
+    const META_PROCESSED = '_spm_interlinker_processed';
+    const META_ADDED_HTML = '_spm_interlinker_added_html';
+    const META_LINKS_COUNT = '_spm_interlinker_links_count';
 
     /**
      * Indexer instance
@@ -106,17 +106,17 @@ class RS_Interlinker_Processor {
         if ( ! $post ) {
             return array(
                 'success' => false,
-                'message' => __( 'Post not found.', 'rs-smart-interlinker' ),
+                'message' => __( 'Post not found.', 'spm-interlinker' ),
             );
         }
 
-        $options    = get_option( 'rs_interlinker_options', array() );
+        $options    = get_option( 'spm_interlinker_options', array() );
         $post_types = isset( $options['post_types'] ) ? $options['post_types'] : array();
 
         if ( ! in_array( $post->post_type, $post_types ) ) {
             return array(
                 'success' => false,
-                'message' => __( 'Post type not enabled for interlinking.', 'rs-smart-interlinker' ),
+                'message' => __( 'Post type not enabled for interlinking.', 'spm-interlinker' ),
             );
         }
 
@@ -125,7 +125,7 @@ class RS_Interlinker_Processor {
         if ( $already_processed ) {
             return array(
                 'success' => false,
-                'message' => __( 'Post already processed. Remove existing links first.', 'rs-smart-interlinker' ),
+                'message' => __( 'Post already processed. Remove existing links first.', 'spm-interlinker' ),
             );
         }
 
@@ -145,7 +145,7 @@ class RS_Interlinker_Processor {
         if ( ! $ai_result || empty( $ai_result['html'] ) ) {
             return array(
                 'success' => false,
-                'message' => __( 'Failed to generate AI links. The AI returned an empty response.', 'rs-smart-interlinker' ),
+                'message' => __( 'Failed to generate AI links. The AI returned an empty response.', 'spm-interlinker' ),
             );
         }
 
@@ -161,7 +161,7 @@ class RS_Interlinker_Processor {
 
         return array(
             'success'     => true,
-            'message'     => sprintf( __( 'Successfully added %d links.', 'rs-smart-interlinker' ), $links_count ),
+            'message'     => sprintf( __( 'Successfully added %d links.', 'spm-interlinker' ), $links_count ),
             'links_count' => $links_count,
         );
     }
@@ -174,7 +174,7 @@ class RS_Interlinker_Processor {
 
         if ( empty( $keyword_index ) ) {
             return array(
-                'error' => __( 'No keywords indexed. Please rebuild the keyword index in Advanced tab first.', 'rs-smart-interlinker' ),
+                'error' => __( 'No keywords indexed. Please rebuild the keyword index in Advanced tab first.', 'spm-interlinker' ),
             );
         }
 
@@ -187,7 +187,7 @@ class RS_Interlinker_Processor {
 
         if ( $result === false ) {
             return array(
-                'error' => __( 'API call failed. Check your API key and try again.', 'rs-smart-interlinker' ),
+                'error' => __( 'API call failed. Check your API key and try again.', 'spm-interlinker' ),
             );
         }
 
@@ -203,7 +203,7 @@ class RS_Interlinker_Processor {
         if ( ! $processed ) {
             return array(
                 'success' => false,
-                'message' => __( 'Post has not been processed.', 'rs-smart-interlinker' ),
+                'message' => __( 'Post has not been processed.', 'spm-interlinker' ),
             );
         }
 
@@ -232,7 +232,7 @@ class RS_Interlinker_Processor {
 
         return array(
             'success' => true,
-            'message' => __( 'Links removed successfully.', 'rs-smart-interlinker' ),
+            'message' => __( 'Links removed successfully.', 'spm-interlinker' ),
         );
     }
 
@@ -240,7 +240,7 @@ class RS_Interlinker_Processor {
      * Get processing status for all posts
      */
     public function get_posts_status() {
-        $options    = get_option( 'rs_interlinker_options', array() );
+        $options    = get_option( 'spm_interlinker_options', array() );
         $post_types = isset( $options['post_types'] ) ? $options['post_types'] : array();
 
         if ( empty( $post_types ) ) {
@@ -280,16 +280,16 @@ class RS_Interlinker_Processor {
      * AJAX handler: Process single post
      */
     public function ajax_process_post() {
-        check_ajax_referer( 'rs_interlinker_nonce', 'nonce' );
+        check_ajax_referer( 'spm_interlinker_nonce', 'nonce' );
 
         if ( ! current_user_can( 'edit_posts' ) ) {
-            wp_send_json_error( __( 'Permission denied.', 'rs-smart-interlinker' ) );
+            wp_send_json_error( __( 'Permission denied.', 'spm-interlinker' ) );
         }
 
         $post_id = isset( $_POST['post_id'] ) ? absint( $_POST['post_id'] ) : 0;
 
         if ( ! $post_id ) {
-            wp_send_json_error( __( 'Invalid post ID.', 'rs-smart-interlinker' ) );
+            wp_send_json_error( __( 'Invalid post ID.', 'spm-interlinker' ) );
         }
 
         $result = $this->process_post( $post_id );
@@ -305,16 +305,16 @@ class RS_Interlinker_Processor {
      * AJAX handler: Remove links from post
      */
     public function ajax_remove_links() {
-        check_ajax_referer( 'rs_interlinker_nonce', 'nonce' );
+        check_ajax_referer( 'spm_interlinker_nonce', 'nonce' );
 
         if ( ! current_user_can( 'edit_posts' ) ) {
-            wp_send_json_error( __( 'Permission denied.', 'rs-smart-interlinker' ) );
+            wp_send_json_error( __( 'Permission denied.', 'spm-interlinker' ) );
         }
 
         $post_id = isset( $_POST['post_id'] ) ? absint( $_POST['post_id'] ) : 0;
 
         if ( ! $post_id ) {
-            wp_send_json_error( __( 'Invalid post ID.', 'rs-smart-interlinker' ) );
+            wp_send_json_error( __( 'Invalid post ID.', 'spm-interlinker' ) );
         }
 
         $result = $this->remove_links( $post_id );
@@ -330,10 +330,10 @@ class RS_Interlinker_Processor {
      * AJAX handler: Get posts status
      */
     public function ajax_get_posts_status() {
-        check_ajax_referer( 'rs_interlinker_nonce', 'nonce' );
+        check_ajax_referer( 'spm_interlinker_nonce', 'nonce' );
 
         if ( ! current_user_can( 'edit_posts' ) ) {
-            wp_send_json_error( __( 'Permission denied.', 'rs-smart-interlinker' ) );
+            wp_send_json_error( __( 'Permission denied.', 'spm-interlinker' ) );
         }
 
         $status = $this->get_posts_status();

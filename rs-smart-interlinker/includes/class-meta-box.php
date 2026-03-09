@@ -9,34 +9,34 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-class RS_Interlinker_Meta_Box {
+class SPM_Interlinker_Meta_Box {
 
     /**
      * Meta key for custom keywords
      */
-    const META_KEY = '_rs_interlinker_keywords';
+    const META_KEY = '_spm_interlinker_keywords';
 
     /**
      * Meta key for generated HTML (from processor)
      */
-    const META_ADDED_HTML = '_rs_interlinker_added_html';
+    const META_ADDED_HTML = '_spm_interlinker_added_html';
 
     /**
      * Meta key for processed status (from processor)
      */
-    const META_PROCESSED = '_rs_interlinker_processed';
+    const META_PROCESSED = '_spm_interlinker_processed';
 
     /**
      * Add meta box to selected post types
      */
     public function add_meta_box() {
-        $options    = get_option( 'rs_interlinker_options', array() );
+        $options    = get_option( 'spm_interlinker_options', array() );
         $post_types = isset( $options['post_types'] ) ? $options['post_types'] : array();
 
         foreach ( $post_types as $post_type ) {
             add_meta_box(
                 'rs-interlinker-keywords',
-                __( 'RS Smart Interlinker', 'rs-smart-interlinker' ),
+                __( 'RS Smart Interlinker', 'spm-interlinker' ),
                 array( $this, 'render_meta_box' ),
                 $post_type,
                 'normal',
@@ -51,7 +51,7 @@ class RS_Interlinker_Meta_Box {
      * @param WP_Post $post Post object
      */
     public function render_meta_box( $post ) {
-        wp_nonce_field( 'rs_interlinker_meta_box', 'rs_interlinker_meta_nonce' );
+        wp_nonce_field( 'spm_interlinker_meta_box', 'spm_interlinker_meta_nonce' );
 
         $keywords      = get_post_meta( $post->ID, self::META_KEY, true );
         $added_html    = get_post_meta( $post->ID, self::META_ADDED_HTML, true );
@@ -62,18 +62,18 @@ class RS_Interlinker_Meta_Box {
             <div style="flex: 1; min-width: 250px;">
                 <p>
                     <label for="rs-interlinker-keywords">
-                        <strong><?php esc_html_e( 'Custom Keywords (comma-separated):', 'rs-smart-interlinker' ); ?></strong>
+                        <strong><?php esc_html_e( 'Custom Keywords (comma-separated):', 'spm-interlinker' ); ?></strong>
                     </label>
                 </p>
                 <textarea
                     id="rs-interlinker-keywords"
-                    name="rs_interlinker_keywords"
+                    name="spm_interlinker_keywords"
                     rows="3"
                     style="width: 100%;"
-                    placeholder="<?php esc_attr_e( 'e.g., Marbella, Costa del Sol, Spain', 'rs-smart-interlinker' ); ?>"
+                    placeholder="<?php esc_attr_e( 'e.g., Marbella, Costa del Sol, Spain', 'spm-interlinker' ); ?>"
                 ><?php echo esc_textarea( $keywords ); ?></textarea>
                 <p class="description">
-                    <?php esc_html_e( 'Override auto-extracted keywords. Leave empty for automatic extraction.', 'rs-smart-interlinker' ); ?>
+                    <?php esc_html_e( 'Override auto-extracted keywords. Leave empty for automatic extraction.', 'spm-interlinker' ); ?>
                 </p>
             </div>
 
@@ -82,30 +82,30 @@ class RS_Interlinker_Meta_Box {
                 <?php if ( $processed ) : ?>
                     <p>
                         <label for="rs-interlinker-generated-html">
-                            <strong><?php esc_html_e( 'Generated Content (editable):', 'rs-smart-interlinker' ); ?></strong>
-                            <span style="color: #46b450; font-weight: normal; margin-left: 10px;">✓ <?php esc_html_e( 'Processed', 'rs-smart-interlinker' ); ?></span>
+                            <strong><?php esc_html_e( 'Generated Content (editable):', 'spm-interlinker' ); ?></strong>
+                            <span style="color: #46b450; font-weight: normal; margin-left: 10px;">âœ“ <?php esc_html_e( 'Processed', 'spm-interlinker' ); ?></span>
                         </label>
                     </p>
                     <textarea
                         id="rs-interlinker-generated-html"
-                        name="rs_interlinker_generated_html"
+                        name="spm_interlinker_generated_html"
                         rows="4"
                         style="width: 100%; font-family: monospace; font-size: 12px;"
                     ><?php echo esc_textarea( $added_html ); ?></textarea>
                     <p class="description">
-                        <?php esc_html_e( 'Edit the AI-generated sentence. HTML links are allowed.', 'rs-smart-interlinker' ); ?>
+                        <?php esc_html_e( 'Edit the AI-generated sentence. HTML links are allowed.', 'spm-interlinker' ); ?>
                     </p>
                     <div style="margin-top: 10px; padding: 12px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px;">
-                        <strong><?php esc_html_e( 'Preview:', 'rs-smart-interlinker' ); ?></strong>
+                        <strong><?php esc_html_e( 'Preview:', 'spm-interlinker' ); ?></strong>
                         <p style="margin: 8px 0 0 0;"><?php echo wp_kses( $added_html, $this->get_allowed_html() ); ?></p>
                     </div>
                 <?php else : ?>
                     <p>
-                        <strong><?php esc_html_e( 'Generated Content:', 'rs-smart-interlinker' ); ?></strong>
-                        <span style="color: #dba617; font-weight: normal; margin-left: 10px;">⏳ <?php esc_html_e( 'Not Processed', 'rs-smart-interlinker' ); ?></span>
+                        <strong><?php esc_html_e( 'Generated Content:', 'spm-interlinker' ); ?></strong>
+                        <span style="color: #dba617; font-weight: normal; margin-left: 10px;">â³ <?php esc_html_e( 'Not Processed', 'spm-interlinker' ); ?></span>
                     </p>
                     <p style="color: #666; font-style: italic; padding: 15px; background: #f9f9f9; border-radius: 4px;">
-                        <?php esc_html_e( 'No content generated yet. Use "Process" button in RS Interlinker settings to generate AI content.', 'rs-smart-interlinker' ); ?>
+                        <?php esc_html_e( 'No content generated yet. Use "Process" button in RS Interlinker settings to generate AI content.', 'spm-interlinker' ); ?>
                     </p>
                 <?php endif; ?>
             </div>
@@ -140,8 +140,8 @@ class RS_Interlinker_Meta_Box {
      */
     public function save_meta_box( $post_id ) {
         // Verify nonce
-        if ( ! isset( $_POST['rs_interlinker_meta_nonce'] ) ||
-             ! wp_verify_nonce( $_POST['rs_interlinker_meta_nonce'], 'rs_interlinker_meta_box' ) ) {
+        if ( ! isset( $_POST['spm_interlinker_meta_nonce'] ) ||
+             ! wp_verify_nonce( $_POST['spm_interlinker_meta_nonce'], 'spm_interlinker_meta_box' ) ) {
             return;
         }
 
@@ -156,7 +156,7 @@ class RS_Interlinker_Meta_Box {
         }
 
         // Check if this post type is selected
-        $options    = get_option( 'rs_interlinker_options', array() );
+        $options    = get_option( 'spm_interlinker_options', array() );
         $post_types = isset( $options['post_types'] ) ? $options['post_types'] : array();
 
         if ( ! in_array( get_post_type( $post_id ), $post_types, true ) ) {
@@ -164,8 +164,8 @@ class RS_Interlinker_Meta_Box {
         }
 
         // Save or delete keywords meta
-        if ( isset( $_POST['rs_interlinker_keywords'] ) ) {
-            $keywords = sanitize_textarea_field( $_POST['rs_interlinker_keywords'] );
+        if ( isset( $_POST['spm_interlinker_keywords'] ) ) {
+            $keywords = sanitize_textarea_field( $_POST['spm_interlinker_keywords'] );
 
             if ( ! empty( trim( $keywords ) ) ) {
                 update_post_meta( $post_id, self::META_KEY, $keywords );
@@ -175,8 +175,8 @@ class RS_Interlinker_Meta_Box {
         }
 
         // Save edited generated HTML (sanitize to prevent XSS)
-        if ( isset( $_POST['rs_interlinker_generated_html'] ) ) {
-            $html = wp_kses( $_POST['rs_interlinker_generated_html'], $this->get_allowed_html() );
+        if ( isset( $_POST['spm_interlinker_generated_html'] ) ) {
+            $html = wp_kses( $_POST['spm_interlinker_generated_html'], $this->get_allowed_html() );
 
             if ( ! empty( trim( $html ) ) ) {
                 update_post_meta( $post_id, self::META_ADDED_HTML, $html );

@@ -1,6 +1,6 @@
 <?php
 /**
- * RS Smart Interlinker Uninstall
+ * SPM Interlinker Uninstall
  *
  * Fired when the plugin is uninstalled.
  */
@@ -13,18 +13,20 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 global $wpdb;
 
 // Delete plugin options
-delete_option( 'rs_interlinker_options' );
-delete_option( 'rs_interlinker_index' );
+delete_option( 'spm_interlinker_options' );
+delete_option( 'spm_interlinker_index' );
+delete_option( 'spm_interlinker_queue' );
+delete_option( 'spm_interlinker_queue_status' );
 
 // Delete all transients with our prefix
 $wpdb->query(
     "DELETE FROM {$wpdb->options}
-     WHERE option_name LIKE '_transient_rs_interlinker_%'
-     OR option_name LIKE '_transient_timeout_rs_interlinker_%'"
+     WHERE option_name LIKE '_transient_spm_interlinker_%'
+     OR option_name LIKE '_transient_timeout_spm_interlinker_%'"
 );
 
 // Delete all post meta
 $wpdb->query(
     "DELETE FROM {$wpdb->postmeta}
-     WHERE meta_key = '_rs_interlinker_keywords'"
+     WHERE meta_key LIKE '_spm_interlinker_%'"
 );

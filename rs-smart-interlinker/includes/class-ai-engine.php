@@ -1,51 +1,382 @@
 <?php
 /**
- * AI Engine Class
+ * AI Engine Class - v2.3.0 Complete Rewrite
  *
- * Handles OpenRouter API calls for Claude AI integration.
+ * Handles OpenRouter API calls for AI-powered internal linking.
+ * Uses a robust approach: AI writes naturally, we handle all linking.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-class RS_Interlinker_AI_Engine {
+class SPM_Interlinker_AI_Engine {
 
-    /**
-     * OpenRouter API endpoint
-     */
     const API_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
-
-    /**
-     * Encryption method (must match class-settings.php)
-     */
     const ENCRYPTION_METHOD = 'aes-256-cbc';
 
-    /**
-     * URL Validator instance
-     */
     private $url_validator;
 
-    /**
-     * Constructor
-     */
     public function __construct( $url_validator ) {
         $this->url_validator = $url_validator;
     }
 
     /**
-     * Decrypt API key from stored options
-     *
-     * @param string $encrypted_value Encrypted value (base64 encoded)
-     * @return string Decrypted value
+     * Generate AI top-up links for a post
+     */
+    public function generate_topup_links( $post_id, $post_title, $keyword_index, $links_needed ) {
+        $options = get_option( 'spm_interlinker_options', array() );
+
+        $encrypted_key = isset( $options['api_key'] ) ? $options['api_key'] : '';
+        $api_key = $this->decrypt_api_key( $encrypted_key );
+        if ( empty( $api_key ) ) {
+            return array( 'error' => 'API key not configured.' );
+        }
+
+        $model           = isset( $options['ai_model'] ) ? $options['ai_model'] : 'google/gemini-2.0-flash-001';
+        $enable_external = ! empty( $options['enable_external'] );
+
+        // Build and send prompt
+        $prompt = $this->build_prompt( $post_title, $keyword_index, $links_needed, $enable_external );
+        $response = $this->call_api( $api_key, $model, $prompt );
+
+        if ( is_array( $response ) && isset( $response['error'] ) ) {
+            return $response;
+        }
+
+        if ( ! $response ) {
+            return array( 'error' => 'API returned empty response.' );
+        }
+
+        // Parse the response
+        $parsed = $this->parse_response( $response, $keyword_index );
+
+        if ( ! $parsed ) {
+            return array( 'error' => 'Failed to parse AI response. Preview: ' . esc_html( substr( $response, 0, 200 ) ) );
+        }
+
+        // Validate and retry external link if needed
+        if ( $enable_external ) {
+            $parsed = $this->handle_external_link( $parsed, $api_key, $model, $post_title );
+        }
+
+        // Build final HTML by finding keywords in sentence and linking them
+        $html = $this->build_html( $parsed, $keyword_index, $options );
+
+        return array(
+            'html'           => $html,
+            'internal_links' => $parsed['internal_links'],
+            'external_link'  => isset( $parsed['external_link'] ) ? $parsed['external_link'] : null,
+            'sentence'       => $parsed['sentence'],
+        );
+    }
+
+    /**
+     * Build the AI prompt - simplified approach
+     * AI writes naturally, we handle linking
+     */
+    private function build_prompt( $post_title, $keyword_index, $links_needed, $include_external ) {
+        // Only send keyword names, not URLs (AI doesn't need URLs)
+        $keywords = array_keys( $keyword_index );
+        $keyword_list = implode( ', ', array_slice( $keywords, 0, 30 ) );
+
+        $external_part = '';
+        if ( $include_external ) {
+            $external_part = '
+Also mention a nearby city/region that readers might want to learn about.
+
+For external_link: provide a Wikipedia URL for that location.';
+        }
+
+        $prompt = 'Write ONE natural sentence for a real estate page about "' . $post_title . '".
+
+The sentence must naturally mention EXACTLY ' . $links_needed . ' of these related properties:
+' . $keyword_list . '
+' . $external_part . '
+
+Return ONLY this JSON (no markdown, no explanation):
+{
+  "sentence": "Your natural sentence mentioning the keywords exactly as written above",
+  "keywords_used": ["keyword1", "keyword2", "keyword3"]' . ($include_external ? ',
+  "external_link": {"text": "city name mentioned in sentence", "url": "https://en.wikipedia.org/wiki/CityName"}' : '') . '
+}';
+
+        return $prompt;
+    }
+
+    /**
+     * Parse AI response - extract JSON and validate
+     */
+    private function parse_response( $response, $keyword_index ) {
+        // Clean markdown fences
+        $response = trim( $response );
+        $response = preg_replace( '/^```[a-z]*\s*/i', '', $response );
+        $response = preg_replace( '/\s*```$/i', '', $response );
+        $response = trim( $response );
+
+        // Extract JSON - find outermost braces
+        $start = strpos( $response, '{' );
+        $end = strrpos( $response, '}' );
+
+        if ( $start === false || $end === false || $end <= $start ) {
+            error_log( 'SPM Interlinker: No JSON found in response' );
+            return false;
+        }
+
+        $json_str = substr( $response, $start, $end - $start + 1 );
+        $data = json_decode( $json_str, true );
+
+        if ( json_last_error() !== JSON_ERROR_NONE ) {
+            error_log( 'SPM Interlinker JSON Error: ' . json_last_error_msg() );
+            error_log( 'SPM Interlinker Response: ' . substr( $response, 0, 500 ) );
+            return false;
+        }
+
+        if ( empty( $data['sentence'] ) ) {
+            error_log( 'SPM Interlinker: No sentence in response' );
+            return false;
+        }
+
+        // Build internal_links from keywords_used
+        $internal_links = array();
+        $keywords_used = isset( $data['keywords_used'] ) ? $data['keywords_used'] : array();
+
+        foreach ( $keywords_used as $keyword ) {
+            $keyword_lower = strtolower( trim( $keyword ) );
+            // Find matching keyword in index (case-insensitive)
+            foreach ( $keyword_index as $index_keyword => $url ) {
+                if ( strtolower( $index_keyword ) === $keyword_lower ) {
+                    $internal_links[] = array(
+                        'keyword' => $index_keyword,
+                        'url'     => $url,
+                    );
+                    break;
+                }
+            }
+        }
+
+        // Parse external link
+        $external_link = null;
+        if ( ! empty( $data['external_link'] ) && ! empty( $data['external_link']['url'] ) ) {
+            $ext_url = $data['external_link']['url'];
+            if ( preg_match( '/^https?:\/\//', $ext_url ) ) {
+                $external_link = array(
+                    'anchor_text' => ! empty( $data['external_link']['text'] ) ? $data['external_link']['text'] : 'Learn more',
+                    'url'         => $ext_url,
+                );
+            }
+        }
+
+        return array(
+            'sentence'       => $data['sentence'],
+            'internal_links' => $internal_links,
+            'external_link'  => $external_link,
+        );
+    }
+
+    /**
+     * Handle external link validation with retries
+     */
+    private function handle_external_link( $parsed, $api_key, $model, $post_title ) {
+        if ( empty( $parsed['external_link'] ) || empty( $parsed['external_link']['url'] ) ) {
+            return $parsed;
+        }
+
+        $max_retries = 3;
+        $retry = 0;
+
+        while ( $retry < $max_retries ) {
+            $url = $parsed['external_link']['url'];
+
+            if ( $this->url_validator->validate( $url ) ) {
+                return $parsed; // Valid URL found
+            }
+
+            $retry++;
+            error_log( "SPM Interlinker: External URL invalid (attempt $retry/$max_retries): $url" );
+
+            // Request new external link
+            $retry_prompt = 'Provide a Wikipedia URL for a location near "' . $post_title . '".
+Return ONLY JSON: {"text": "location name", "url": "https://en.wikipedia.org/wiki/..."}';
+
+            $retry_response = $this->call_api( $api_key, $model, $retry_prompt );
+
+            if ( $retry_response && ! is_array( $retry_response ) ) {
+                $retry_response = trim( $retry_response );
+                $retry_response = preg_replace( '/^```[a-z]*\s*/i', '', $retry_response );
+                $retry_response = preg_replace( '/\s*```$/i', '', $retry_response );
+
+                $start = strpos( $retry_response, '{' );
+                $end = strrpos( $retry_response, '}' );
+
+                if ( $start !== false && $end !== false && $end > $start ) {
+                    $retry_data = json_decode( substr( $retry_response, $start, $end - $start + 1 ), true );
+
+                    if ( ! empty( $retry_data['url'] ) && preg_match( '/^https?:\/\//', $retry_data['url'] ) ) {
+                        $parsed['external_link'] = array(
+                            'anchor_text' => ! empty( $retry_data['text'] ) ? $retry_data['text'] : 'Learn more',
+                            'url'         => $retry_data['url'],
+                        );
+                    }
+                }
+            }
+        }
+
+        // All retries failed
+        error_log( 'SPM Interlinker: External link skipped after ' . $max_retries . ' failed attempts' );
+        $parsed['external_link'] = null;
+        return $parsed;
+    }
+
+    /**
+     * Build HTML by finding keywords in sentence and creating links
+     */
+    private function build_html( $parsed, $keyword_index, $options ) {
+        $sentence = $parsed['sentence'];
+
+        // Remove any placeholder syntax the AI might have used
+        $sentence = preg_replace( '/\{([^}]+)\}/', '$1', $sentence );
+
+        // Remove any markdown links the AI might have used [text](url)
+        $sentence = preg_replace( '/\[([^\]]+)\]\([^)]+\)/', '$1', $sentence );
+
+        // Track which parts have been linked to avoid double-linking
+        $linked_positions = array();
+
+        // Link internal keywords - sort by length (longest first) to avoid partial matches
+        $links_to_apply = $parsed['internal_links'];
+        usort( $links_to_apply, function( $a, $b ) {
+            return strlen( $b['keyword'] ) - strlen( $a['keyword'] );
+        });
+
+        foreach ( $links_to_apply as $link ) {
+            if ( empty( $link['keyword'] ) || empty( $link['url'] ) ) {
+                continue;
+            }
+            if ( ! $this->is_safe_url( $link['url'] ) ) {
+                continue;
+            }
+
+            $keyword = $link['keyword'];
+            $url     = esc_url( $link['url'] );
+            $anchor  = esc_html( $keyword );
+            $html_link = '<a href="' . $url . '">' . $anchor . '</a>';
+
+            // Find keyword in sentence (case-insensitive, word boundary)
+            $pattern = '/\b(' . preg_quote( $keyword, '/' ) . ')\b/i';
+
+            if ( preg_match( $pattern, $sentence, $matches, PREG_OFFSET_CAPTURE ) ) {
+                $match_pos = $matches[0][1];
+                $match_text = $matches[0][0];
+
+                // Check if this position overlaps with existing link
+                $overlaps = false;
+                foreach ( $linked_positions as $pos ) {
+                    if ( $match_pos >= $pos['start'] && $match_pos < $pos['end'] ) {
+                        $overlaps = true;
+                        break;
+                    }
+                }
+
+                if ( ! $overlaps ) {
+                    $sentence = substr_replace( $sentence, $html_link, $match_pos, strlen( $match_text ) );
+                    $linked_positions[] = array(
+                        'start' => $match_pos,
+                        'end'   => $match_pos + strlen( $html_link ),
+                    );
+                }
+            }
+        }
+
+        // Handle external link
+        if ( ! empty( $parsed['external_link'] ) && ! empty( $parsed['external_link']['url'] ) ) {
+            $ext_url = $parsed['external_link']['url'];
+
+            if ( $this->is_safe_url( $ext_url ) ) {
+                $ext_anchor = esc_html( $parsed['external_link']['anchor_text'] );
+                $rel = isset( $options['external_link_rel'] ) && $options['external_link_rel'] === 'nofollow'
+                       ? 'noopener nofollow' : 'noopener';
+
+                $ext_html = '<a href="' . esc_url( $ext_url ) . '" target="_blank" rel="' . $rel . '">' . $ext_anchor . '</a>';
+
+                // Try to find anchor text in sentence and link it
+                $ext_pattern = '/\b(' . preg_quote( $parsed['external_link']['anchor_text'], '/' ) . ')\b/i';
+
+                if ( preg_match( $ext_pattern, $sentence ) && strpos( $sentence, $ext_url ) === false ) {
+                    $sentence = preg_replace( $ext_pattern, $ext_html, $sentence, 1 );
+                } else {
+                    // Append external link at end if not found in sentence
+                    $sentence = rtrim( $sentence, '.' ) . ' (' . $ext_html . ').';
+                }
+            }
+        }
+
+        return $this->sanitize_html( $sentence );
+    }
+
+    /**
+     * Make API call to OpenRouter
+     */
+    private function call_api( $api_key, $model, $prompt, $retry_count = 0 ) {
+        $body = array(
+            'model'      => $model,
+            'messages'   => array(
+                array(
+                    'role'    => 'system',
+                    'content' => 'You are a helpful assistant. Return only valid JSON, no markdown formatting.',
+                ),
+                array(
+                    'role'    => 'user',
+                    'content' => $prompt,
+                ),
+            ),
+            'max_tokens' => 400,
+        );
+
+        $response = wp_remote_post( self::API_ENDPOINT, array(
+            'timeout' => 60,
+            'headers' => array(
+                'Authorization' => 'Bearer ' . $api_key,
+                'Content-Type'  => 'application/json',
+                'HTTP-Referer'  => home_url(),
+                'X-Title'       => get_bloginfo( 'name' ),
+            ),
+            'body' => wp_json_encode( $body ),
+        ) );
+
+        if ( is_wp_error( $response ) ) {
+            return array( 'error' => 'Connection error: ' . $response->get_error_message() );
+        }
+
+        $status_code = wp_remote_retrieve_response_code( $response );
+        $response_body = json_decode( wp_remote_retrieve_body( $response ), true );
+
+        // Retry on rate limit or server error
+        if ( ( $status_code === 429 || $status_code >= 500 ) && $retry_count < 2 ) {
+            sleep( $status_code === 429 ? 5 : 3 );
+            return $this->call_api( $api_key, $model, $prompt, $retry_count + 1 );
+        }
+
+        if ( $status_code !== 200 ) {
+            $error = isset( $response_body['error']['message'] ) ? $response_body['error']['message'] : "HTTP $status_code";
+            return array( 'error' => 'API Error: ' . $error );
+        }
+
+        if ( isset( $response_body['choices'][0]['message']['content'] ) ) {
+            return $response_body['choices'][0]['message']['content'];
+        }
+
+        return array( 'error' => 'Unexpected API response structure.' );
+    }
+
+    /**
+     * Decrypt API key
      */
     private function decrypt_api_key( $encrypted_value ) {
         if ( empty( $encrypted_value ) ) {
             return '';
         }
 
-        // Backwards compatibility: if it looks like a plaintext API key, return as-is
-        // OpenRouter keys start with "sk-or-" or similar prefixes
         if ( preg_match( '/^sk-[a-zA-Z]/', $encrypted_value ) ) {
             return $encrypted_value;
         }
@@ -68,439 +399,26 @@ class RS_Interlinker_AI_Engine {
 
         $iv = substr( $decoded, 0, $iv_length );
         $encrypted = substr( $decoded, $iv_length );
-
         $decrypted = openssl_decrypt( $encrypted, self::ENCRYPTION_METHOD, $key, OPENSSL_RAW_DATA, $iv );
 
-        if ( $decrypted === false ) {
-            return $encrypted_value;
-        }
-
-        return $decrypted;
+        return $decrypted !== false ? $decrypted : $encrypted_value;
     }
 
-    /**
-     * Get encryption key derived from WordPress AUTH_KEY
-     *
-     * @return string 32-byte encryption key
-     */
     private function get_encryption_key() {
         $auth_key = defined( 'AUTH_KEY' ) ? AUTH_KEY : 'rs-interlinker-default-key';
         return hash( 'sha256', $auth_key, true );
     }
 
-    /**
-     * Generate AI top-up links for a post
-     *
-     * @param int    $post_id       Post ID
-     * @param string $post_title    Post title
-     * @param array  $keyword_index Keyword index (keyword => URL)
-     * @param int    $links_needed  Number of internal links needed
-     * @return array|false Array with 'html' key or false on failure
-     */
-    public function generate_topup_links( $post_id, $post_title, $keyword_index, $links_needed ) {
-        $options = get_option( 'rs_interlinker_options', array() );
-
-        // Check if API key is configured and decrypt it
-        $encrypted_key = isset( $options['api_key'] ) ? $options['api_key'] : '';
-        $api_key = $this->decrypt_api_key( $encrypted_key );
-        if ( empty( $api_key ) ) {
-            return false;
-        }
-
-        $model           = isset( $options['ai_model'] ) ? $options['ai_model'] : 'anthropic/claude-sonnet-4.5';
-        $enable_external = ! empty( $options['enable_external'] );
-
-        // Get post context for unique content generation
-        $post_context = $this->get_post_context( $post_id );
-
-        // Build the prompt with context
-        $prompt = $this->build_prompt( $post_title, $keyword_index, $links_needed, $enable_external, $post_context );
-
-        // Make API call
-        $response = $this->call_api( $api_key, $model, $prompt );
-
-        // Check for error response
-        if ( is_array( $response ) && isset( $response['error'] ) ) {
-            return $response; // Return error to show user
-        }
-
-        if ( ! $response ) {
-            return array( 'error' => __( 'API returned empty response.', 'rs-smart-interlinker' ) );
-        }
-
-        // Parse response
-        $parsed = $this->parse_response( $response );
-
-        if ( ! $parsed ) {
-            // Return first 200 chars of response for debugging
-            $preview = substr( $response, 0, 200 );
-            return array( 'error' => sprintf( __( 'Failed to parse AI response. Response preview: %s...', 'rs-smart-interlinker' ), esc_html( $preview ) ) );
-        }
-
-        // Validate external URL if present
-        if ( $enable_external && ! empty( $parsed['external_link'] ) ) {
-            $external_valid = $this->url_validator->validate( $parsed['external_link']['url'] );
-
-            if ( ! $external_valid ) {
-                // Re-prompt for alternative URL
-                $retry_prompt   = $this->build_retry_prompt( $post_title, $parsed['external_link']['url'] );
-                $retry_response = $this->call_api( $api_key, $model, $retry_prompt );
-
-                if ( $retry_response ) {
-                    $retry_parsed = $this->parse_response( $retry_response );
-                    if ( $retry_parsed && ! empty( $retry_parsed['external_link'] ) ) {
-                        $retry_valid = $this->url_validator->validate( $retry_parsed['external_link']['url'] );
-                        if ( $retry_valid ) {
-                            $parsed['external_link'] = $retry_parsed['external_link'];
-                        } else {
-                            $parsed['external_link'] = null;
-                        }
-                    }
-                } else {
-                    $parsed['external_link'] = null;
-                }
-            }
-        }
-
-        // Build final HTML
-        $html = $this->build_html( $parsed, $options );
-
-        return array(
-            'html'           => $html,
-            'internal_links' => $parsed['internal_links'],
-            'external_link'  => $parsed['external_link'],
-            'sentence'       => $parsed['sentence'],
-        );
-    }
-
-    /**
-     * Get context from post content for unique sentence generation
-     *
-     * @param int $post_id Post ID
-     * @return string Context snippet
-     */
-    private function get_post_context( $post_id ) {
-        $post = get_post( $post_id );
-        if ( ! $post ) {
-            return '';
-        }
-
-        // Try excerpt first
-        $excerpt = $post->post_excerpt;
-        if ( ! empty( $excerpt ) ) {
-            return wp_strip_all_tags( $excerpt );
-        }
-
-        // Fall back to content snippet (first 300 chars)
-        $content = $post->post_content;
-        if ( ! empty( $content ) ) {
-            // Strip shortcodes and HTML
-            $content = strip_shortcodes( $content );
-            $content = wp_strip_all_tags( $content );
-            $content = preg_replace( '/\s+/', ' ', $content );
-            $content = trim( $content );
-
-            if ( strlen( $content ) > 300 ) {
-                $content = substr( $content, 0, 300 ) . '...';
-            }
-
-            return $content;
-        }
-
-        return '';
-    }
-
-    /**
-     * Build the AI prompt
-     *
-     * @param string $post_title      Post title
-     * @param array  $keyword_index   Keyword index
-     * @param int    $links_needed    Number of links needed
-     * @param bool   $include_external Include external link
-     * @param string $post_context    Context from post content
-     */
-    private function build_prompt( $post_title, $keyword_index, $links_needed, $include_external, $post_context = '' ) {
-        $keyword_list = '';
-        foreach ( $keyword_index as $keyword => $url ) {
-            $keyword_list .= "{$keyword} | {$url}\n";
-        }
-
-        $context_instruction = '';
-        if ( ! empty( $post_context ) ) {
-            $context_instruction = '
-The page content includes: "' . substr( $post_context, 0, 250 ) . '"
-
-IMPORTANT: Write a UNIQUE sentence that relates specifically to this content. Do NOT use generic phrases like "Buyers exploring X often also consider Y". Instead, create a sentence that:
-- References specific aspects mentioned in the content above
-- Uses varied sentence structures (not always "those interested in X may also like Y")
-- Sounds like it was written by a human editor for this specific page
-';
-        }
-
-        $external_instruction = '';
-        if ( $include_external ) {
-            $external_instruction = '
-2. Include exactly 1 external link to an authoritative, non-competitor website relevant to "' . $post_title . '". Good sources: official municipality/government sites, Wikipedia, established tourism or travel sites. NEVER link to real estate agency websites.';
-        }
-
-        $prompt = 'I have a webpage about "' . $post_title . '".
-' . $context_instruction . '
-I need you to write ONE natural, UNIQUE sentence that I can append to the page content. This sentence must:
-
-1. Mention exactly ' . $links_needed . ' of the following related pages by using their exact keyword name from the list below. Choose the most geographically or topically relevant ones:
-
-' . $keyword_list . '
-' . $external_instruction . '
-
-3. Sound natural and UNIQUE - avoid formulaic patterns. Each page should have a distinctly different sentence structure and approach.
-
-Return your response in this exact JSON format:
-{
-  "sentence": "Your natural sentence here with {keyword} placeholders for internal links",
-  "internal_links": [
-    {"keyword": "exact keyword", "url": "URL from the list"},
-    ...
-  ]' . ( $include_external ? ',
-  "external_link": {
-    "anchor_text": "descriptive anchor text",
-    "url": "https://..."
-  }' : '' ) . '
-}
-
-Return ONLY the JSON, no markdown fences, no explanation.';
-
-        return $prompt;
-    }
-
-    /**
-     * Build retry prompt for failed external URL
-     */
-    private function build_retry_prompt( $post_title, $failed_url ) {
-        return 'The external URL you suggested (' . $failed_url . ') is not accessible. Please provide an alternative authoritative external link for a page about "' . $post_title . '".
-
-Good sources: official municipality/government sites, Wikipedia, established tourism or travel sites. NEVER link to real estate agency websites.
-
-Return your response in this exact JSON format:
-{
-  "external_link": {
-    "anchor_text": "descriptive anchor text",
-    "url": "https://..."
-  }
-}
-
-Return ONLY the JSON, no markdown fences, no explanation.';
-    }
-
-    /**
-     * Make API call to OpenRouter with retry logic
-     */
-    private function call_api( $api_key, $model, $prompt, $retry_count = 0 ) {
-        $max_retries = 2;
-
-        $body = array(
-            'model'      => $model,
-            'messages'   => array(
-                array(
-                    'role'    => 'system',
-                    'content' => 'You are an SEO content assistant. Generate natural, human-readable sentences for internal linking on websites.',
-                ),
-                array(
-                    'role'    => 'user',
-                    'content' => $prompt,
-                ),
-            ),
-            'max_tokens' => 300,
-        );
-
-        $response = wp_remote_post( self::API_ENDPOINT, array(
-            'timeout' => 60,
-            'headers' => array(
-                'Authorization' => 'Bearer ' . $api_key,
-                'Content-Type'  => 'application/json',
-                'HTTP-Referer'  => home_url(),
-                'X-Title'       => get_bloginfo( 'name' ),
-            ),
-            'body'    => wp_json_encode( $body ),
-        ) );
-
-        if ( is_wp_error( $response ) ) {
-            $error_msg = $response->get_error_message();
-            error_log( 'RS Interlinker API Error: ' . $error_msg );
-            return array( 'error' => 'Connection error: ' . $error_msg );
-        }
-
-        $status_code = wp_remote_retrieve_response_code( $response );
-        $response_body = json_decode( wp_remote_retrieve_body( $response ), true );
-
-        // Handle rate limiting (429) with retry
-        if ( $status_code === 429 && $retry_count < $max_retries ) {
-            error_log( 'RS Interlinker: Rate limited, retrying in 5 seconds...' );
-            sleep( 5 );
-            return $this->call_api( $api_key, $model, $prompt, $retry_count + 1 );
-        }
-
-        // Handle server errors (5xx) with retry
-        if ( $status_code >= 500 && $retry_count < $max_retries ) {
-            error_log( 'RS Interlinker: Server error ' . $status_code . ', retrying in 3 seconds...' );
-            sleep( 3 );
-            return $this->call_api( $api_key, $model, $prompt, $retry_count + 1 );
-        }
-
-        if ( $status_code !== 200 ) {
-            $error_msg = isset( $response_body['error']['message'] ) ? $response_body['error']['message'] : "HTTP $status_code";
-            error_log( 'RS Interlinker API Error: ' . $error_msg );
-            return array( 'error' => 'API Error: ' . $error_msg );
-        }
-
-        if ( isset( $response_body['choices'][0]['message']['content'] ) ) {
-            return $response_body['choices'][0]['message']['content'];
-        }
-
-        error_log( 'RS Interlinker: Unexpected API response structure' );
-        return array( 'error' => __( 'Unexpected API response structure.', 'rs-smart-interlinker' ) );
-    }
-
-    /**
-     * Parse AI response JSON
-     */
-    private function parse_response( $response ) {
-        $original_response = $response;
-
-        // Clean up response - remove markdown fences if present
-        $response = trim( $response );
-        $response = preg_replace( '/^```json\s*/i', '', $response );
-        $response = preg_replace( '/^```\s*/i', '', $response );
-        $response = preg_replace( '/\s*```$/i', '', $response );
-
-        // Try to extract JSON object from response (in case there's extra text)
-        if ( preg_match( '/\{[\s\S]*\}/', $response, $matches ) ) {
-            $response = $matches[0];
-        }
-
-        $data = json_decode( $response, true );
-
-        if ( json_last_error() !== JSON_ERROR_NONE ) {
-            error_log( 'RS Interlinker JSON Parse Error: ' . json_last_error_msg() );
-            error_log( 'RS Interlinker Raw Response: ' . substr( $original_response, 0, 500 ) );
-            return false;
-        }
-
-        // Validate structure
-        if ( ! isset( $data['sentence'] ) || ! isset( $data['internal_links'] ) ) {
-            error_log( 'RS Interlinker: Missing required fields in response. Keys: ' . implode( ', ', array_keys( $data ) ) );
-            return false;
-        }
-
-        return array(
-            'sentence'       => $data['sentence'],
-            'internal_links' => $data['internal_links'],
-            'external_link'  => isset( $data['external_link'] ) ? $data['external_link'] : null,
-        );
-    }
-
-    /**
-     * Build final HTML from parsed response
-     */
-    private function build_html( $parsed, $options ) {
-        $sentence = $parsed['sentence'];
-
-        // Replace internal link placeholders
-        foreach ( $parsed['internal_links'] as $link ) {
-            if ( empty( $link['keyword'] ) || empty( $link['url'] ) ) {
-                continue;
-            }
-
-            // Validate URL is safe
-            if ( ! $this->is_safe_url( $link['url'] ) ) {
-                continue;
-            }
-
-            $keyword     = sanitize_text_field( $link['keyword'] );
-            $url         = esc_url( $link['url'] );
-            $anchor      = esc_html( $keyword );
-            $replacement = '<a href="' . $url . '">' . $anchor . '</a>';
-
-            // Replace {keyword} placeholder
-            $sentence = str_replace( '{' . $keyword . '}', $replacement, $sentence );
-
-            // Also try direct keyword replacement if placeholder not used
-            if ( strpos( $sentence, $replacement ) === false ) {
-                $sentence = preg_replace(
-                    '/\b' . preg_quote( $keyword, '/' ) . '\b/i',
-                    $replacement,
-                    $sentence,
-                    1
-                );
-            }
-        }
-
-        // Replace external link if present
-        if ( ! empty( $parsed['external_link'] ) &&
-             ! empty( $parsed['external_link']['url'] ) &&
-             ! empty( $parsed['external_link']['anchor_text'] ) &&
-             $this->is_safe_url( $parsed['external_link']['url'] ) ) {
-
-            $ext_url    = esc_url( $parsed['external_link']['url'] );
-            $ext_anchor = esc_html( sanitize_text_field( $parsed['external_link']['anchor_text'] ) );
-            $rel        = isset( $options['external_link_rel'] ) && $options['external_link_rel'] === 'nofollow'
-                          ? 'noopener nofollow'
-                          : 'noopener';
-
-            $ext_replacement = '<a href="' . $ext_url . '" target="_blank" rel="' . $rel . '">' . $ext_anchor . '</a>';
-
-            // Replace placeholder or direct text
-            $sentence = str_replace( '{external_link}', $ext_replacement, $sentence );
-
-            // Try to replace anchor text directly if not using placeholder
-            if ( strpos( $sentence, $ext_replacement ) === false ) {
-                $sentence = preg_replace(
-                    '/\b' . preg_quote( $parsed['external_link']['anchor_text'], '/' ) . '\b/i',
-                    $ext_replacement,
-                    $sentence,
-                    1
-                );
-            }
-        }
-
-        // Sanitize final HTML to prevent XSS
-        return $this->sanitize_html( $sentence );
-    }
-
-    /**
-     * Sanitize HTML output to prevent XSS attacks
-     * Only allows safe tags: links, basic formatting
-     */
     private function sanitize_html( $html ) {
-        $allowed_tags = array(
-            'a' => array(
-                'href'   => array(),
-                'title'  => array(),
-                'target' => array(),
-                'rel'    => array(),
-            ),
-            'strong' => array(),
-            'em'     => array(),
-            'b'      => array(),
-            'i'      => array(),
-        );
-
-        return wp_kses( $html, $allowed_tags );
+        return wp_kses( $html, array(
+            'a' => array( 'href' => array(), 'target' => array(), 'rel' => array() ),
+        ) );
     }
 
-    /**
-     * Validate URL is safe (http/https only, no javascript:, data:, etc.)
-     */
     private function is_safe_url( $url ) {
-        if ( empty( $url ) ) {
-            return false;
-        }
-
+        if ( empty( $url ) ) return false;
         $parsed = wp_parse_url( $url );
-
-        if ( ! isset( $parsed['scheme'] ) ) {
-            return false;
-        }
-
+        if ( ! isset( $parsed['scheme'] ) ) return false;
         return in_array( strtolower( $parsed['scheme'] ), array( 'http', 'https' ), true );
     }
 }
