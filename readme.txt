@@ -1,96 +1,126 @@
-=== RS Smart Interlinker ===
-Contributors: rsdevelopment
-Tags: internal linking, seo, ai, claude, interlinking, contextual links
+=== SPM Interlinker ===
+Contributors: spmdevelopment
+Tags: internal linking, seo, ai, interlinking, contextual links, openrouter
 Requires at least: 5.0
-Tested up to: 6.4
+Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.0.0
+Stable tag: 2.5.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Automatically interlinks content across post types using AI-powered contextual linking via Claude AI.
+AI-powered internal linking for WordPress. Automatically create contextual internal links using OpenRouter API.
 
 == Description ==
 
-RS Smart Interlinker is a powerful WordPress plugin that automatically creates internal links between your content using a two-phase approach:
-
-**Phase 1 - Natural Keyword Matching (No API Required)**
-* Scans paragraph text for matches against other posts' keywords
-* Links the first occurrence of each keyword match only
-* Handles possessives and whole-word matching
-* Skips headings, existing links, images, shortcodes, and code blocks
-
-**Phase 2 - AI-Powered Top-Up (Claude via OpenRouter)**
-* Only fires if Phase 1 produced fewer than configured max links
-* Generates natural, contextual sentences with additional internal links
-* Optionally includes one authoritative external link
-* Validates external URLs before caching
-* Caches responses permanently for optimal performance
+SPM Interlinker automatically creates internal links between your WordPress content using AI. It generates natural, contextual sentences with embedded links to related posts, boosting your SEO without manual effort.
 
 **Key Features**
-* Works with any combination of post types (posts, pages, CPTs)
-* Cross-post-type linking enabled
-* Runtime injection via the_content filter - nothing stored in database
-* Per-post keyword override capability
-* Comprehensive settings with tabbed interface
-* Preview mode for testing before deployment
-* Instant removal by deactivating plugin
+
+* AI-powered link generation using OpenRouter API
+* Support for multiple AI models (Gemini, Claude, GPT)
+* Non-destructive - links stored in meta, not content
+* Bulk processing with background queue
+* Works with posts, pages, and custom post types
+* Optional external links to authoritative sources
+* Cost-efficient with optimized prompts
+
+**How It Works**
+
+1. The plugin indexes keywords from your posts (titles, tags, categories)
+2. When processing, AI generates a natural sentence mentioning related content
+3. Keywords are automatically linked to corresponding posts
+4. The sentence is displayed at the end of your content
+
+**Cost Efficient**
+
+* Gemini Flash recommended (~$0.001 per post)
+* Configurable keyword limits to reduce API costs
+* One-time processing - results are cached
 
 == Installation ==
 
-1. Upload the `rs-smart-interlinker` folder to `/wp-content/plugins/`
-2. Activate the plugin through the 'Plugins' menu in WordPress
-3. Go to 'RS Interlinker' in the admin menu
-4. Configure your OpenRouter API key and settings
-5. Select which post types should participate in interlinking
+1. Upload the plugin folder to `/wp-content/plugins/spm-interlinker/`
+2. Activate the plugin through the 'Plugins' menu
+3. Go to 'SPM Interlinker' in the admin menu
+4. Add your OpenRouter API key (get one at openrouter.ai/keys)
+5. Configure settings and start processing
 
 == Configuration ==
 
 **General Tab**
+
 * OpenRouter API Key - Required for AI features
-* AI Model - Default: anthropic/claude-sonnet-4.5
-* Max Internal Links Per Page - Default: 3
-* Max External Links Per Page - Default: 1
-* Enable External Linking - Toggle on/off
+* AI Model - Choose from Gemini, Claude, or GPT models
+* Max Internal Links - Default: 3
+* Max External Links - Default: 1
 
 **Post Types Tab**
-* Select which post types participate in the interlinking pool
+
+* Select which post types participate in interlinking
 
 **Keyword Sources Tab**
-* Post Title (with prefix stripping)
+
+* Post Title (with optional prefix stripping)
 * Tags
 * Categories
 * Custom Field
 
 **Advanced Tab**
+
 * External Link Rel (dofollow/nofollow)
-* Clear All Cache button
-* Rebuild Index button
+* Rebuild Keyword Index
+
+**Process Posts Tab**
+
+* View all posts and their processing status
+* Process individually or in bulk
+* Background processing via WP Cron
+* Configurable batch size
 
 == Frequently Asked Questions ==
 
-= Do I need an OpenRouter API key? =
+= Do I need an API key? =
 
-The API key is only required for Phase 2 AI-powered linking. Phase 1 natural keyword matching works without any API.
+Yes, you need an OpenRouter API key to use this plugin. Sign up at openrouter.ai/keys (free tier available).
+
+= Which AI model should I use? =
+
+Gemini 2.0 Flash is recommended for the best balance of cost and quality (~$0.001 per post).
 
 = Are links stored in my post content? =
 
-No. All links are injected at runtime via the_content filter. Deactivating the plugin instantly removes all injected links.
+No. Links are stored in post meta and displayed via the_content filter. Your original content is never modified.
 
-= Can I override keywords for specific posts? =
+= How do I remove links? =
 
-Yes. Each post has a meta box where you can specify custom keywords that override automatic extraction.
+Click "Remove Links" for individual posts, or deactivate the plugin to remove all links instantly.
 
-= How do I refresh AI-generated content? =
+= Can I edit the generated content? =
 
-Go to Advanced tab and click "Clear All Cache". The AI will regenerate content on the next page view.
+Yes. Each post has a meta box where you can edit the AI-generated sentence.
 
 == Changelog ==
+
+= 2.5.3 =
+* Renamed plugin to SPM Interlinker
+* Added automatic data migration
+* Fixed JavaScript issues
+* Added configurable batch size
+* Added "Get API Key" button
+
+= 2.1.0 =
+* Added background queue processing
+* Improved error handling
+
+= 2.0.0 =
+* Complete rewrite
+* Non-destructive link storage
+* Cost optimization
 
 = 1.0.0 =
 * Initial release
 
 == Upgrade Notice ==
 
-= 1.0.0 =
-Initial release of RS Smart Interlinker.
+= 2.5.3 =
+Plugin renamed to SPM Interlinker. Your existing data will be automatically migrated.
